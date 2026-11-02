@@ -1,0 +1,18 @@
+Codex 额度面板 · 三版设计存档
+保存日期：2026-11-02
+
+双击 index.html 选择要查看的版本。
+
+01-original-glass.html：原玻璃版
+对应源稿：sources/glass-unified-motion-demo.html
+
+02-focused.html：聚焦任务版
+对应源稿：sources/focused-quota-demo.html
+
+03-liquid-glass.html：液态玻璃版
+对应源稿：sources/liquid-focused-quota-demo.html
+
+三个独立预览文件和三个可编辑源稿都已保留。
+数值均为示例数据。没有替换 Windows 正式程序，没有提交或上传 GitHub。
+用户安排下午回家后再处理 GitHub；等待届时指示，不自动上传。
+预览页面可能需要联网加载公共样式和图标。
