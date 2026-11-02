@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f7f8f6" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#181b19" media="(prefers-color-scheme: dark)">
+    <title>Codex 额度</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="panel">
+      <header class="panel-header">
+        <div>
+          <h1>Codex 额度</h1>
+          <p class="account-label">当前登录账户</p>
+        </div>
+        <button class="refresh-button" id="refresh" type="button" aria-label="刷新额度" title="刷新额度">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 7v5h-5M4 17v-5h5" />
+            <path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17" />
+          </svg>
+        </button>
+      </header>
+
+      <p class="notice" id="notice" role="status" hidden></p>
+
+      <div id="loading" class="loading-state" aria-label="正在读取额度" role="status">
+        <div class="skeleton skeleton-label"></div>
+        <div class="skeleton skeleton-value"></div>
+        <div class="skeleton skeleton-bar"></div>
+        <div class="skeleton skeleton-line"></div>
+        <span class="sr-only">正在读取账户额度…</span>
+      </div>
+
+      <div id="content" hidden>
+        <div id="limits" class="limits"></div>
+        <section id="extras" class="extras" aria-label="其他可用额度" hidden></section>
+        <section id="usage" class="usage-section" aria-labelledby="usage-title" hidden>
+          <div class="section-heading">
+            <h2 id="usage-title">每日用量</h2>
+            <span class="section-unit">Token</span>
+          </div>
+          <div id="usage-chart" hidden>
+            <p id="chart-readout" class="chart-readout"></p>
+            <div id="chart-bars" class="chart-bars" role="group" aria-label="最近每日 Token 用量"></div>
+            <div id="chart-axis" class="chart-axis" aria-hidden="true"></div>
+          </div>
+          <dl id="usage-summary" class="usage-summary"></dl>
+          <p class="section-note">Token 用量与额度百分比分别统计。</p>
+        </section>
+        <p id="usage-note" class="section-note" hidden></p>
+      </div>
+
+      <footer class="panel-footer">
+        <p id="update-status" class="update-status" role="status">正在连接本地服务</p>
+        <p>每分钟自动更新<span aria-hidden="true"> · </span>北京时间</p>
+      </footer>
+      <noscript><p class="notice">请启用 JavaScript 以读取和自动更新额度。</p></noscript>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,34 @@
+# Local account/activity data and runtime state
+.data/
+.run/
+.versions/
+.cache/
+.work/
+.impeccable/
+
+# Generated build and release output
+dist/
+.dist-stage-*/
+*.exe
+*.dll
+*.pdb
+*.log
+*.tmp
+node_modules/
+
+# Personal handoffs, notes, and review screenshots
+handoff-*.json
+notes/
+docs/notes/
+screenshots/
+docs/screenshots/
+
+# Local design history and render-only inspection helpers
+DESIGN.md
+DESIGN-DECISIONS.md
+V2-DESIGN.md
+docs/superpowers/
+native/RenderCheck.cs
+native/UpdateRenderCheck.cs
+native/VerifyRelease.cs
+plugin/
