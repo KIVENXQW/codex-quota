@@ -246,7 +246,7 @@ namespace CodexQuota
             int offset = ((int)buckets[0].Start.DayOfWeek + 6) % 7;
             int columns = (int)Math.Ceiling((buckets.Count + offset) / 7d);
             float gap = Math.Max(1, scale);
-            float pitch = Math.Min(9 * scale, (Width - 1) / (float)Math.Max(1, columns));
+            float pitch = Math.Min(24 * scale, (Width - 1) / (float)Math.Max(1, columns));
             float size = Math.Max(2, pitch - gap);
             float top = 19 * scale;
             long max = 0;

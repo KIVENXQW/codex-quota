@@ -5,7 +5,7 @@ using System.Windows.Forms;
 
 namespace CodexQuota
 {
-    public sealed class UpdateDialog : Form
+    public sealed class UpdateDialog : Form, IUpdateView
     {
         private readonly bool english;
         private readonly float scale;
@@ -21,6 +21,8 @@ namespace CodexQuota
 
         public event EventHandler InstallRequested;
         public event EventHandler CancelRequested;
+
+        public void Open() { if (!Visible) Show(); Activate(); }
 
         public UpdateDialog(UserPreferences prefs, string currentVersion)
         {
@@ -106,6 +108,7 @@ namespace CodexQuota
 
         private int Px(int value) { return (int)Math.Round(value * scale); }
         private string L(string zh, string en) { return english ? en : zh; }
+        private static string Multiline(string value) { return (value ?? "").Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n"); }
 
         private Label MakeLabel(Font font, Color color)
         {
@@ -151,7 +154,7 @@ namespace CodexQuota
             heading.ForeColor = QuotaAppearance.Text;
             heading.Text = L("有新版本可用", "An update is available");
             detailLabel.Text = L("新版本 ", "New version ") + (String.IsNullOrWhiteSpace(release.Version) ? "—" : release.Version);
-            notes.Text = String.IsNullOrWhiteSpace(release.Notes) ? L("此版本未提供更新说明。", "No release notes were provided.") : release.Notes;
+            notes.Text = Multiline(String.IsNullOrWhiteSpace(release.Notes) ? L("此版本未提供更新说明。", "No release notes were provided.") : release.Notes);
             notes.SelectionStart = 0;
             notes.SelectionLength = 0;
             notesFrame.Visible = true;
@@ -172,7 +175,7 @@ namespace CodexQuota
             heading.Text = headline ?? "";
             bool longDetail = detail != null && (detail.Length > 110 || detail.IndexOf('\n') >= 0);
             detailLabel.Text = longDetail ? "" : detail ?? "";
-            notes.Text = longDetail ? detail : "";
+            notes.Text = Multiline(longDetail ? detail : "");
             notes.SelectionStart = 0;
             notes.SelectionLength = 0;
             notesFrame.Visible = longDetail;
