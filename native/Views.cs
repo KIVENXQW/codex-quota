@@ -226,6 +226,7 @@ namespace CodexQuota
             private bool english;
             private Font labelFont;
             private Font valueFont;
+            private Font percentFont;
 
             internal BadgeButton()
             {
@@ -245,8 +246,10 @@ namespace CodexQuota
                 scale = factor;
                 if (labelFont != null) labelFont.Dispose();
                 if (valueFont != null) valueFont.Dispose();
-                labelFont = new Font("Microsoft YaHei UI", 10 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
-                valueFont = new Font("Microsoft YaHei UI", 13 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
+                if (percentFont != null) percentFont.Dispose();
+                labelFont = new Font("Microsoft YaHei UI", 10 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
+                valueFont = new Font("Segoe UI", 22 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
+                percentFont = new Font("Segoe UI", 9 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
                 Invalidate();
             }
 
@@ -273,16 +276,29 @@ namespace CodexQuota
 
             protected override void OnPaint(PaintEventArgs e)
             {
-                Color background = stale ? Color.FromArgb(237, 240, 242) : QuotaAppearance.Blend(accent, Color.White, hover ? .65f : .79f);
-                Color foreground = stale ? QuotaAppearance.Muted : QuotaAppearance.Darken(accent, .48f);
+                Color background = stale ? Color.FromArgb(236, 236, 242) : QuotaAppearance.Blend(accent, Color.FromArgb(247, 244, 252), hover ? .72f : .87f);
+                Color foreground = stale ? Color.FromArgb(72, 70, 81) : Color.FromArgb(48, 44, 58);
                 e.Graphics.Clear(background);
-                using (var glass = new LinearGradientBrush(ClientRectangle, QuotaAppearance.Blend(background, Color.White, .64f), background, 100f)) e.Graphics.FillRectangle(glass, ClientRectangle);
-                using (var shine = new Pen(Color.FromArgb(190, Color.White))) e.Graphics.DrawLine(shine, 7 * scale, 1 * scale, Width - 7 * scale, 1 * scale);
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                RectangleF lens = new RectangleF(.6f * scale, .6f * scale, Width - 1.2f * scale, Height - 1.2f * scale);
+                GlassMaterial.Surface(e.Graphics, lens, 8.5f * scale, background, scale, false);
+                using (GraphicsPath clip = QuotaAppearance.RoundRectangle(lens, 8.5f * scale))
+                {
+                    GraphicsState saved = e.Graphics.Save();
+                    e.Graphics.SetClip(clip, CombineMode.Intersect);
+                    using (Brush reflection = new LinearGradientBrush(new RectangleF(0, 0, Width, 25 * scale), Color.FromArgb(100, Color.White), Color.FromArgb(0, Color.White), 85f))
+                        e.Graphics.FillEllipse(reflection, -10 * scale, -11 * scale, 59 * scale, 31 * scale);
+                    e.Graphics.Restore(saved);
+                }
+                RectangleF rim = lens; rim.Inflate(-1.2f * scale, -1.2f * scale);
+                using (GraphicsPath path = QuotaAppearance.RoundRectangle(rim, 7.3f * scale))
+                using (Brush reflection = new LinearGradientBrush(rim, Color.FromArgb(0, Color.White), Color.FromArgb(80, QuotaAppearance.Blend(accent, Color.FromArgb(124, 115, 153), .55f)), 90f))
+                using (Pen edge = new Pen(reflection, .8f * scale)) e.Graphics.DrawPath(edge, path);
                 TextFormatFlags flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
                 TextRenderer.DrawText(e.Graphics, english ? "Left" : "剩余", labelFont,
-                    new Rectangle(0, (int)(4 * scale), Width, (int)(14 * scale)), foreground, flags);
-                TextRenderer.DrawText(e.Graphics, percentage, valueFont,
-                    new Rectangle(0, (int)(18 * scale), Width, (int)(18 * scale)), foreground, flags);
+                    new Rectangle(0, (int)(3 * scale), Width, (int)(13 * scale)), foreground, flags);
+                DrawValue(e.Graphics, foreground);
                 if (stale)
                 {
                     e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -293,12 +309,43 @@ namespace CodexQuota
                     ControlPaint.DrawFocusRectangle(e.Graphics, new Rectangle(3, 3, Width - 6, Height - 6), foreground, background);
             }
 
+            private void DrawValue(Graphics graphics, Color foreground)
+            {
+                bool known = percentage.EndsWith("%", StringComparison.Ordinal);
+                string number = known ? percentage.Substring(0, percentage.Length - 1) : percentage;
+                using (GraphicsPath digits = new GraphicsPath())
+                using (GraphicsPath cap = new GraphicsPath())
+                using (GraphicsPath percent = new GraphicsPath())
+                using (StringFormat format = new StringFormat(StringFormat.GenericTypographic))
+                using (Brush ink = new SolidBrush(foreground))
+                {
+                    digits.AddString(number, valueFont.FontFamily, (int)valueFont.Style, valueFont.Size, PointF.Empty, format);
+                    cap.AddString("0", valueFont.FontFamily, (int)valueFont.Style, valueFont.Size, PointF.Empty, format);
+                    if (known) percent.AddString("%", percentFont.FontFamily, (int)percentFont.Style, percentFont.Size, PointF.Empty, format);
+                    RectangleF bounds = digits.GetBounds(), capBounds = cap.GetBounds(), percentBounds = known ? percent.GetBounds() : RectangleF.Empty;
+                    float gap = known ? .8f * scale : 0;
+                    float width = Math.Min(bounds.Width, 34 * scale - percentBounds.Width - gap);
+                    float left = (Width - width - percentBounds.Width - gap) / 2;
+                    float baseline = 35.2f * scale;
+                    // Three digits and fractions keep the same readable cap height;
+                    // only their width compresses to fit the fixed avatar attachment.
+                    using (Matrix matrix = new Matrix(width / bounds.Width, 0, 0, 1, left - bounds.Left * width / bounds.Width, baseline - capBounds.Bottom))
+                    { digits.Transform(matrix); graphics.FillPath(ink, digits); }
+                    if (known)
+                    {
+                        using (Matrix matrix = new Matrix(1, 0, 0, 1, left + width + gap - percentBounds.Left, baseline - percentBounds.Bottom))
+                        { percent.Transform(matrix); graphics.FillPath(ink, percent); }
+                    }
+                }
+            }
+
             protected override void Dispose(bool disposing)
             {
                 if (disposing)
                 {
                     if (labelFont != null) labelFont.Dispose();
                     if (valueFont != null) valueFont.Dispose();
+                    if (percentFont != null) percentFont.Dispose();
                 }
                 base.Dispose(disposing);
             }
@@ -326,6 +373,9 @@ namespace CodexQuota
         {
             FlatStyle = FlatStyle.Flat; FlatAppearance.BorderSize = 0; Cursor = Cursors.Hand; BackColor = Color.White;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
+            // Button starts opaque: clear that flag so each WM_PAINT buffer first
+            // receives its own translated parent background instead of stale pixels.
+            SetStyle(ControlStyles.Opaque, false);
         }
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }

@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using CodexQuota;
 
@@ -20,8 +21,88 @@ class LiquidGlassViewTests
     static void Key(Control control, Keys key) { control.GetType().GetMethod("OnKeyDown", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(control, new object[] { new KeyEventArgs(key) }); }
     [STAThread] static int Main()
     {
-        try { Run(); Console.WriteLine("Liquid glass views: " + checks + " checks PASS"); return 0; }
+        try { Application.EnableVisualStyles(); NativeButtonPainting(); Run(); Console.WriteLine("Liquid glass views: " + checks + " checks PASS"); return 0; }
         catch (Exception error) { Console.Error.WriteLine("FAIL: " + (error.InnerException ?? error).Message); return 1; }
+    }
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+    static Bitmap NativePaint(Control control)
+    {
+        Bitmap bitmap = new Bitmap(control.Width, control.Height);
+        using (Graphics graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.Clear(Color.Magenta);
+            IntPtr dc = graphics.GetHdc();
+            try { SendMessage(control.Handle, 0x000F, dc, IntPtr.Zero); } // WM_PAINT, not WM_PRINT.
+            finally { graphics.ReleaseHdc(dc); }
+        }
+        return bitmap;
+    }
+    static void NativeButtonPainting()
+    {
+        // Each real child HWND gets its own WM_PAINT double buffer. A whole-tree
+        // WM_PRINT alone masked the 2.3.0 regression by supplying the parent pixels.
+        using (var host = new OffscreenPaintHost())
+        using (var font = new Font("Microsoft YaHei UI", 13, GraphicsUnit.Pixel))
+        {
+            var buttons = new[] {
+                new RoundedButton { Text = "今天", Font = font }, new RoundedButton { Text = "近 7 天", Font = font },
+                new RoundedButton { Text = "近 30 天", Font = font }, new RoundedButton { Text = "全部", Font = font }
+            };
+            var rail = new GlassSegmentRail(1, "paintRegressionRail", buttons);
+            rail.SetBounds(15, 15, 390, 44); host.Controls.Add(rail); buttons[0].Selected = true;
+            host.Show(); Application.DoEvents();
+            for (int pass = 0; pass < 3; pass++)
+            {
+                if (pass == 1)
+                {
+                    // Hide avoids an animation clock during this deterministic check;
+                    // the same existing HWNDs are then repainted after changing selection.
+                    host.Hide(); buttons[0].Selected = false; buttons[2].Selected = true; host.Show();
+                }
+                rail.Refresh(); Application.DoEvents();
+                using (var expected = new Bitmap(rail.Width, rail.Height))
+                {
+                    rail.DrawToBitmap(expected, rail.ClientRectangle);
+                    int different = 0, pixels = 0;
+                    foreach (RoundedButton button in buttons)
+                    {
+                        using (Bitmap actual = NativePaint(button))
+                        {
+                            int visibleText = 0;
+                            int textTop = Math.Max(4, (button.Height - font.Height) / 2);
+                            int textBottom = Math.Min(button.Height - 4, textTop + font.Height);
+                            for (int y = textTop; y < textBottom; y++)
+                                for (int x = 10; x < button.Width - 10; x++)
+                                {
+                                    Color ink = actual.GetPixel(x, y);
+                                    if (ink.R < 180 && ink.G < 180 && ink.B < 180) visibleText++;
+                                }
+                            Check(visibleText > 20, "Every native-painted segment must contain visible label ink, not just match an empty reference: " + button.Text + ", pass " + pass);
+                            for (int y = 2; y < button.Height - 2; y++)
+                                for (int x = 2; x < button.Width - 2; x++)
+                                {
+                                    Color a = actual.GetPixel(x, y), b = expected.GetPixel(button.Left + x, button.Top + y);
+                                    if (Math.Abs(a.R - b.R) > 12 || Math.Abs(a.G - b.G) > 12 || Math.Abs(a.B - b.B) > 12) different++;
+                                    pixels++;
+                                }
+                        }
+                    }
+                    Check(different < pixels / 50, "Native WM_PAINT must match parent-composited rendering without duplicated labels/lenses; pass " + pass + ", differing pixels " + different + "/" + pixels);
+                }
+            }
+            host.Hide();
+        }
+    }
+    sealed class OffscreenPaintHost : Form
+    {
+        internal OffscreenPaintHost()
+        {
+            StartPosition = FormStartPosition.Manual; Location = new Point(-30000, -30000);
+            Size = new Size(430, 96); FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false;
+            BackColor = Color.FromArgb(245, 240, 249);
+        }
+        protected override bool ShowWithoutActivation { get { return true; } }
+        protected override CreateParams CreateParams { get { CreateParams value = base.CreateParams; value.ExStyle |= 0x08000000; return value; } }
     }
     static void Run()
     {

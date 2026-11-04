@@ -174,9 +174,7 @@ namespace CodexQuota {
       corner.PositionAt(screen.WorkingArea,scale);
     }
     void SetTrayIcon(double? remaining,bool stale) {
-      Icon icon=preferences.CornerStyle=="tray"
-        ?TrayTextIcon.Create(remaining,stale,preferences.AccentColor,DarkTaskbar(),popup.UpdateView.UpdateAvailable,SystemInformation.SmallIconSize)
-        :TrayRingIcon.Create(remaining,stale,preferences.AccentColor,DarkTaskbar(),popup.UpdateView.UpdateAvailable,SystemInformation.SmallIconSize);
+      Icon icon=TrayTextIcon.Create(remaining,stale,preferences.AccentColor,DarkTaskbar(),popup.UpdateView.UpdateAvailable,SystemInformation.SmallIconSize);
       var previous=tray.Icon;tray.Icon=icon;if(previous!=null)previous.Dispose();
     }
     void ShowDetails(bool nearBadge,bool nearCorner=false) {
@@ -233,7 +231,8 @@ namespace CodexQuota {
       try {
         bool hasBadge=badge!=null&&!badge.IsDisposed&&badge.IsHandleCreated;
         Rectangle bounds=hasBadge?badge.ScreenBounds:Rectangle.Empty;
-        var payload=new {version=AppVersion.Current,pid=Process.GetCurrentProcess().Id,trayVisible=tray.Visible,badgeVisible=hasBadge&&badge.Visible,badgeHandle=hasBadge?badge.Handle.ToInt64():0L,badgeBounds=new {x=bounds.Left,y=bounds.Top,width=bounds.Width,height=bounds.Height},popupVisible=popup.Visible,popupHandle=popup.Handle.ToInt64(),remaining=state.Primary==null?null:state.Primary.Remaining,stale=state.Stale,available=state.Available,target=tracker.Target.ToInt64(),tokenDays=state.DailyTokens.Count,activityStatus=state.Activity.Status,workSeconds=state.Activity.TotalWorkSeconds,completedTasks=state.Activity.CompletedTasks,language=preferences.Language,accent=preferences.AccentHtml,updaterBuiltIn=true,eventDrivenTracking=tracker.EventsAvailable,avatarVisible=tracker.AvatarVisible,attachedToWindow=hasBadge&&badge.AttachedParent!=IntPtr.Zero,badgeParent=hasBadge?badge.AttachedParent.ToInt64():0L};
+        Rectangle cornerBounds=corner.IsDisposed?Rectangle.Empty:corner.Bounds;
+        var payload=new {version=AppVersion.Current,pid=Process.GetCurrentProcess().Id,trayVisible=tray.Visible,trayStyle="digits",cornerStyle=preferences.CornerStyle,glassTransparency=preferences.GlassTransparency,cornerVisible=!corner.IsDisposed&&corner.Visible,cornerBounds=new {x=cornerBounds.X,y=cornerBounds.Y,width=cornerBounds.Width,height=cornerBounds.Height},badgeVisible=hasBadge&&badge.Visible,badgeHandle=hasBadge?badge.Handle.ToInt64():0L,badgeBounds=new {x=bounds.Left,y=bounds.Top,width=bounds.Width,height=bounds.Height},popupVisible=popup.Visible,popupHandle=popup.Handle.ToInt64(),remaining=state.Primary==null?null:state.Primary.Remaining,stale=state.Stale,available=state.Available,target=tracker.Target.ToInt64(),tokenDays=state.DailyTokens.Count,activityStatus=state.Activity.Status,workSeconds=state.Activity.TotalWorkSeconds,completedTasks=state.Activity.CompletedTasks,language=preferences.Language,accent=preferences.AccentHtml,updaterBuiltIn=true,eventDrivenTracking=tracker.EventsAvailable,avatarVisible=tracker.AvatarVisible,attachedToWindow=hasBadge&&badge.AttachedParent!=IntPtr.Zero,badgeParent=hasBadge?badge.AttachedParent.ToInt64():0L};
         string json=new JavaScriptSerializer().Serialize(payload);
         if(json==lastStatus)return;lastStatus=json;
         lock(statusWriteLock){pendingStatus=json;if(statusWriting)return;statusWriting=true;}

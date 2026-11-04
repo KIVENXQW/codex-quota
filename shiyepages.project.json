@@ -7,11 +7,12 @@
   "group": "桌面工具",
   "source": {
     "type": "url",
-    "url": "https://github.com/KIVENXQW/codex-quota/releases/tag/v2.3.0"
+    "url": "https://github.com/KIVENXQW/codex-quota/releases/tag/v2.3.1"
   },
   "release": {
-    "title": "2.3.0 液态玻璃主界面与可选角标",
-    "revision": "v2.3.0",
-    "notes": "正式原生主面板重绘；双行玻璃卡、玻璃胶囊、数字托盘可切换；玻璃背景透明度 10%–80% 可调，文字保持清晰。安装包已完成原生与数据测试、旧更新器兼容校验。此版本只收录正式 GitHub 发布入口，不收录演示网页和测试样例。"
-  }
+    "title": "2.3.1 修复文字重叠并统一头像与托盘",
+    "revision": "v2.3.1",
+    "notes": "修复真实窗口重绘时日期及导航文字叠印；头像换同套玻璃与大号粗体数字；所有模式的系统托盘统一使用清晰数字。保留三种角落显示和透明度调节。本条仅收录正式发布入口，不是源目录或数据快照。"
+  },
+  "websiteId": "8071be26-b1cd-4db4-809c-f88b28787965"
 }

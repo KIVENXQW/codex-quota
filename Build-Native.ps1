@@ -68,7 +68,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Heatmap scale tests failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Usage detail popup tests failed to compile.' }
 & (Join-Path $nativeDir 'UsageDetailPopupTests.exe')
 if ($LASTEXITCODE -ne 0) { throw 'Usage detail popup tests failed.' }
-foreach ($test in @('LiquidGlassViewTests','CornerWidgetTests')) {
+foreach ($test in @('LiquidGlassViewTests','CornerWidgetTests','BadgeVisualTests')) {
     & $compiler /nologo /langversion:5 /utf8output /target:exe ('/out:' + (Join-Path $nativeDir ($test + '.exe'))) @viewReferences @viewSources (Join-Path $nativeDir ($test + '.cs'))
     if ($LASTEXITCODE -ne 0) { throw "$test failed to compile." }
     & (Join-Path $nativeDir ($test + '.exe'))
