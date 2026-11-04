@@ -52,7 +52,7 @@ namespace CodexQuota
     {
         private List<ChartBucket> buckets = new List<ChartBucket>();
         private readonly List<RectangleF> hitAreas = new List<RectangleF>();
-        private readonly ToolTip tooltip = new ToolTip();
+        private readonly ChartDetailPresenter details;
         private readonly Font small;
         private Color accent = Color.FromArgb(218, 145, 170);
         private bool english;
@@ -67,9 +67,7 @@ namespace CodexQuota
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
             BackColor = Color.White;
             AccessibleRole = AccessibleRole.Chart;
-            tooltip.InitialDelay = 100;
-            tooltip.ReshowDelay = 50;
-            tooltip.AutoPopDelay = 18000;
+            details = new ChartDetailPresenter(this,scale);
             TabStop = true;
         }
 
@@ -82,7 +80,7 @@ namespace CodexQuota
             english = useEnglish;
             AccessibleName = english ? "Usage chart. Arrow keys select a period." : "用量柱状图，方向键可选择日期查看明细";
             hovered = -1;
-            tooltip.SetToolTip(this, "");
+            details.Hide();
             Invalidate();
         }
 
@@ -176,15 +174,20 @@ namespace CodexQuota
             int next = -1;
             for (int i = 0; i < hitAreas.Count; i++) if (hitAreas[i].Contains(e.Location)) { next = i; break; }
             if (next >= buckets.Count) next = -1;
-            if (next != hovered)
+            if (next != hovered || (next >= 0 && !details.Visible))
             {
                 hovered = next;
-                tooltip.SetToolTip(this, hovered >= 0 ? UsageText.BucketTooltip(buckets[hovered], english) : "");
+                ShowDetails();
                 Invalidate();
             }
         }
 
-        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hovered = -1; tooltip.Hide(this); Invalidate(); }
+        private void ShowDetails() {
+            if(hovered<0||hovered>=buckets.Count||hovered>=hitAreas.Count){details.Hide();return;}
+            AccessibleDescription=UsageText.BucketTooltip(buckets[hovered],english);
+            details.Show(buckets[hovered],Rectangle.Round(hitAreas[hovered]),accent,english);
+        }
+        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hovered = -1; details.Hide(); Invalidate(); }
         protected override bool IsInputKey(Keys keyData) { return keyData == Keys.Left || keyData == Keys.Right || base.IsInputKey(keyData); }
         protected override void OnKeyDown(KeyEventArgs e)
         {
@@ -192,24 +195,25 @@ namespace CodexQuota
             if ((e.KeyCode == Keys.Left || e.KeyCode == Keys.Right) && buckets.Count > 0)
             {
                 hovered = Math.Max(0, Math.Min(buckets.Count - 1, hovered + (e.KeyCode == Keys.Right ? 1 : -1)));
-                tooltip.Show(UsageText.BucketTooltip(buckets[hovered], english), this, Width / 2, Height / 2, 15000);
+                ShowDetails();
                 Invalidate();
                 e.Handled = true;
             }
         }
-        protected override void Dispose(bool disposing) { if (disposing) { tooltip.Dispose(); small.Dispose(); } base.Dispose(disposing); }
+        protected override void Dispose(bool disposing) { if (disposing) { details.Dispose(); small.Dispose(); } base.Dispose(disposing); }
     }
 
     internal sealed class TokenHeatmap : Control
     {
         private List<ChartBucket> buckets = new List<ChartBucket>();
         private readonly List<RectangleF> cells = new List<RectangleF>();
-        private readonly ToolTip tooltip = new ToolTip();
+        private readonly ChartDetailPresenter details;
         private readonly Font small;
         private readonly float scale;
         private Color accent = Color.FromArgb(218, 145, 170);
         private bool english;
         private int hovered = -1;
+        private HeatmapScale colors = HeatmapScale.Create(new List<ChartBucket>());
 
         internal TokenHeatmap(float factor)
         {
@@ -217,21 +221,20 @@ namespace CodexQuota
             small = new Font("Microsoft YaHei UI", 11 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
             BackColor = Color.White;
-            tooltip.InitialDelay = 100;
-            tooltip.ReshowDelay = 50;
-            tooltip.AutoPopDelay = 15000;
+            details = new ChartDetailPresenter(this,scale);
             AccessibleRole = AccessibleRole.Chart;
             TabStop = true;
         }
 
-        internal void SetData(List<ChartBucket> value, Color color, bool useEnglish)
+        internal void SetData(List<ChartBucket> value, Color color, bool useEnglish, HeatmapScale annualScale = null)
         {
             buckets = value ?? new List<ChartBucket>();
             cells.Clear();
             accent = color;
             english = useEnglish;
+            colors = annualScale ?? HeatmapScale.Create(buckets);
             hovered = -1;
-            tooltip.SetToolTip(this, "");
+            details.Hide();
             AccessibleName = english ? "Daily Token heatmap, previous 365 days" : "最近 365 天 Token 用量热力图";
             Invalidate();
         }
@@ -245,12 +248,10 @@ namespace CodexQuota
             if (buckets.Count == 0) return;
             int offset = ((int)buckets[0].Start.DayOfWeek + 6) % 7;
             int columns = (int)Math.Ceiling((buckets.Count + offset) / 7d);
-            float gap = Math.Max(1, scale);
-            float pitch = Math.Min(24 * scale, (Width - 1) / (float)Math.Max(1, columns));
+            float pitch = Math.Min(26 * scale, (Width - 1) / (float)Math.Max(1, columns));
+            float gap = Math.Max(1, Math.Min(3 * scale,pitch * .12f));
             float size = Math.Max(2, pitch - gap);
             float top = 19 * scale;
-            long max = 0;
-            foreach (ChartBucket bucket in buckets) if (bucket.Tokens.HasValue) max = Math.Max(max, bucket.Tokens.Value);
             int previousMonth = -1;
             for (int i = 0; i < buckets.Count; i++)
             {
@@ -270,34 +271,36 @@ namespace CodexQuota
                 }
                 RectangleF cell = new RectangleF(x, top + row * pitch, size, size);
                 cells.Add(cell);
-                Color color = Color.FromArgb(241, 242, 244);
-                if (bucket.Tokens.HasValue && bucket.Tokens.Value > 0 && max > 0)
-                {
-                    double normalized = Math.Log(1 + bucket.Tokens.Value) / Math.Log(1 + max);
-                    float blend = normalized > .85 ? 0 : normalized > .65 ? .25f : normalized > .4 ? .5f : .72f;
-                    color = QuotaAppearance.Blend(accent, Color.White, blend);
-                }
-                else if (!bucket.Tokens.HasValue) color = Color.White;
+                Color color = colors.ColorFor(bucket.Tokens,accent);
                 using (Brush brush = new SolidBrush(color))
-                using (GraphicsPath path = QuotaAppearance.RoundRectangle(cell, Math.Min(1.5f * scale, size / 3)))
+                using (GraphicsPath path = QuotaAppearance.RoundRectangle(cell, Math.Min(3f * scale, size / 3)))
                 {
                     g.FillPath(brush, path);
-                    if (!bucket.Tokens.HasValue || hovered == i)
+                    if (colors.Level(bucket.Tokens)<0 || hovered == i)
                         using (Pen pen = new Pen(hovered == i ? QuotaAppearance.Darken(accent, .3f) : Color.FromArgb(232, 234, 237), Math.Max(1, scale))) g.DrawPath(pen, path);
                 }
             }
             float legendY = top + 7 * pitch + 9 * scale;
-            string legend = english ? "Less" : "少";
-            using (Brush brush = new SolidBrush(QuotaAppearance.Muted)) g.DrawString(legend, small, brush, 0, legendY - 2 * scale);
-            for (int level = 0; level < 5; level++)
-            {
-                Color color = level == 0 ? Color.FromArgb(241, 242, 244) : QuotaAppearance.Blend(accent, Color.White, (4 - level) * .24f);
-                using (Brush brush = new SolidBrush(color)) g.FillRectangle(brush, 29 * scale + level * 11 * scale, legendY, 8 * scale, 8 * scale);
+            float xLegend=0;
+            if(colors.BandCount>0) {
+                xLegend=LegendText(g,english?"Less":"少",xLegend,legendY)+5*scale;
+                for(int level=1;level<=colors.BandCount;level++){LegendCell(g,colors.ColorForBand(level,accent),xLegend,legendY,false);xLegend+=15*scale;}
+                xLegend=LegendText(g,english?"More":"多",xLegend,legendY)+14*scale;
             }
-            using (Brush brush = new SolidBrush(QuotaAppearance.Muted))
-            {
-                g.DrawString(english ? "More" : "多", small, brush, 88 * scale, legendY - 2 * scale);
-                g.DrawString(english ? "Outline: no record" : "空心：暂无记录", small, brush, Width - 106 * scale, legendY - 2 * scale);
+            LegendCell(g,colors.ColorFor(0,accent),xLegend,legendY,false);xLegend+=15*scale;
+            xLegend=LegendText(g,"0",xLegend,legendY)+14*scale;
+            LegendCell(g,colors.ColorFor(null,accent),xLegend,legendY,true);xLegend+=15*scale;
+            LegendText(g,english?"No record":"无记录",xLegend,legendY);
+            LegendText(g,english?"Colors use the same annual distribution":"色阶按全年分布统一分档",0,legendY+20*scale);
+        }
+        private float LegendText(Graphics g,string text,float x,float y) {
+            using(var brush=new SolidBrush(QuotaAppearance.Muted))g.DrawString(text,small,brush,x,y-2*scale);
+            return x+g.MeasureString(text,small).Width;
+        }
+        private void LegendCell(Graphics g,Color color,float x,float y,bool outline) {
+            using(var path=QuotaAppearance.RoundRectangle(new RectangleF(x,y,10*scale,10*scale),2*scale)) {
+                using(var brush=new SolidBrush(color))g.FillPath(brush,path);
+                if(outline)using(var pen=new Pen(Color.FromArgb(224,218,230),scale))g.DrawPath(pen,path);
             }
         }
 
@@ -307,14 +310,19 @@ namespace CodexQuota
             int next = -1;
             for (int i = 0; i < cells.Count; i++) if (cells[i].Contains(e.Location)) { next = i; break; }
             if (next >= buckets.Count) next = -1;
-            if (next != hovered)
+            if (next != hovered || (next >= 0 && !details.Visible))
             {
                 hovered = next;
-                tooltip.SetToolTip(this, hovered >= 0 ? UsageText.BucketTooltip(buckets[hovered], english) : "");
+                ShowDetails();
                 Invalidate();
             }
         }
-        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hovered = -1; tooltip.Hide(this); Invalidate(); }
+        private void ShowDetails() {
+            if(hovered<0||hovered>=buckets.Count||hovered>=cells.Count){details.Hide();return;}
+            AccessibleDescription=UsageText.BucketTooltip(buckets[hovered],english);
+            details.Show(buckets[hovered],Rectangle.Round(cells[hovered]),accent,english);
+        }
+        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hovered = -1; details.Hide(); Invalidate(); }
         protected override bool IsInputKey(Keys keyData) { return keyData == Keys.Left || keyData == Keys.Right || base.IsInputKey(keyData); }
         protected override void OnKeyDown(KeyEventArgs e)
         {
@@ -322,11 +330,11 @@ namespace CodexQuota
             if ((e.KeyCode == Keys.Left || e.KeyCode == Keys.Right) && buckets.Count > 0)
             {
                 hovered = hovered < 0 ? buckets.Count - 1 : Math.Max(0, Math.Min(buckets.Count - 1, hovered + (e.KeyCode == Keys.Right ? 1 : -1)));
-                tooltip.Show(UsageText.BucketTooltip(buckets[hovered], english), this, Width / 2, Height / 2, 15000);
+                ShowDetails();
                 Invalidate();
                 e.Handled = true;
             }
         }
-        protected override void Dispose(bool disposing) { if (disposing) { tooltip.Dispose(); small.Dispose(); } base.Dispose(disposing); }
+        protected override void Dispose(bool disposing) { if (disposing) { details.Dispose(); small.Dispose(); } base.Dispose(disposing); }
     }
 }

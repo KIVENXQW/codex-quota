@@ -1,6 +1,6 @@
 # 内置更新与发布
 
-当前版本 **2.2.0**，更新源为公开仓库 `KIVENXQW/codex-quota`。客户端匿名读取 Releases，无需把 GitHub 令牌写入配置或安装包。
+当前版本 **2.2.1**，更新源为公开仓库 `KIVENXQW/codex-quota`。客户端匿名读取 Releases，无需把 GitHub 令牌写入配置或安装包。
 
 ## 用户更新
 

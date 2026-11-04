@@ -5,7 +5,7 @@ $nativeDir = Join-Path $PSScriptRoot 'native'
 $framework = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
 $wpf = Join-Path $framework 'WPF'
 $viewReferences = @('/r:System.Windows.Forms.dll','/r:System.Drawing.dll','/r:System.Net.Http.dll','/r:System.Web.Extensions.dll','/r:System.IO.Compression.dll','/r:System.IO.Compression.FileSystem.dll')
-$viewSources = @('Model.cs','Analytics.cs','Preferences.cs','Views.cs','BadgeAttachment.cs','Charts.cs','ColorPicker.cs','UpdateCore.cs','UpdateClient.cs','IUpdateView.cs','GlassUpdateView.cs') | ForEach-Object { Join-Path $nativeDir $_ }
+$viewSources = @('Model.cs','Analytics.cs','Preferences.cs','Views.cs','BadgeAttachment.cs','Charts.cs','HeatmapScale.cs','UsageDetailPopup.cs','ChartDetailPresenter.cs','ColorPicker.cs','UpdateCore.cs','UpdateClient.cs','IUpdateView.cs','GlassUpdateView.cs') | ForEach-Object { Join-Path $nativeDir $_ }
 & $compiler /nologo /target:exe ('/out:' + (Join-Path $nativeDir 'ModelTests.exe')) /r:System.Web.Extensions.dll (Join-Path $nativeDir 'Model.cs') (Join-Path $nativeDir 'ModelTests.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Native data tests failed to compile.' }
 & (Join-Path $nativeDir 'ModelTests.exe')
@@ -52,9 +52,21 @@ if ($LASTEXITCODE -ne 0) { throw 'Integrated update tests failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Glass popup tests failed to compile.' }
 & (Join-Path $nativeDir 'GlassPopupTests.exe')
 if ($LASTEXITCODE -ne 0) { throw 'Glass popup tests failed.' }
+& $compiler /nologo /utf8output /target:exe ('/out:' + (Join-Path $nativeDir 'TrayRingIconTests.exe')) /r:System.Drawing.dll (Join-Path $nativeDir 'TrayRingIcon.cs') (Join-Path $nativeDir 'TrayRingIconTests.cs')
+if ($LASTEXITCODE -ne 0) { throw 'Tray ring icon tests failed to compile.' }
+& (Join-Path $nativeDir 'TrayRingIconTests.exe')
+if ($LASTEXITCODE -ne 0) { throw 'Tray ring icon tests failed.' }
+& $compiler /nologo /utf8output /target:exe ('/out:' + (Join-Path $nativeDir 'HeatmapScaleTests.exe')) /r:System.Drawing.dll /r:System.Web.Extensions.dll (Join-Path $nativeDir 'Model.cs') (Join-Path $nativeDir 'Analytics.cs') (Join-Path $nativeDir 'HeatmapScale.cs') (Join-Path $nativeDir 'HeatmapScaleTests.cs')
+if ($LASTEXITCODE -ne 0) { throw 'Heatmap scale tests failed to compile.' }
+& (Join-Path $nativeDir 'HeatmapScaleTests.exe')
+if ($LASTEXITCODE -ne 0) { throw 'Heatmap scale tests failed.' }
+& $compiler /nologo /utf8output /target:exe ('/out:' + (Join-Path $nativeDir 'UsageDetailPopupTests.exe')) @viewReferences @viewSources (Join-Path $nativeDir 'UsageDetailPopupTests.cs')
+if ($LASTEXITCODE -ne 0) { throw 'Usage detail popup tests failed to compile.' }
+& (Join-Path $nativeDir 'UsageDetailPopupTests.exe')
+if ($LASTEXITCODE -ne 0) { throw 'Usage detail popup tests failed.' }
 if ($TestOnly) { return }
 & $compiler /nologo /target:winexe /platform:x64 /utf8output ('/out:' + (Join-Path $PSScriptRoot 'CodexQuota.Updater.exe')) /r:System.Windows.Forms.dll /r:System.Management.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll (Join-Path $nativeDir 'UpdateCore.cs') (Join-Path $nativeDir 'UpdateHelper.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Update helper build failed.' }
-& $compiler /nologo /target:winexe /platform:x64 /utf8output ('/win32manifest:' + (Join-Path $nativeDir 'app.manifest')) ('/out:' + (Join-Path $PSScriptRoot $OutputName)) @viewReferences @viewSources ('/r:' + (Join-Path $wpf 'UIAutomationClient.dll')) ('/r:' + (Join-Path $wpf 'UIAutomationTypes.dll')) ('/r:' + (Join-Path $wpf 'WindowsBase.dll')) (Join-Path $nativeDir 'WindowTracker.cs') (Join-Path $nativeDir 'GlassUpdateToast.cs') (Join-Path $nativeDir 'UpdateDialog.cs') (Join-Path $nativeDir 'UpdateController.cs') (Join-Path $nativeDir 'Program.cs')
+& $compiler /nologo /target:winexe /platform:x64 /utf8output ('/win32manifest:' + (Join-Path $nativeDir 'app.manifest')) ('/out:' + (Join-Path $PSScriptRoot $OutputName)) @viewReferences @viewSources ('/r:' + (Join-Path $wpf 'UIAutomationClient.dll')) ('/r:' + (Join-Path $wpf 'UIAutomationTypes.dll')) ('/r:' + (Join-Path $wpf 'WindowsBase.dll')) (Join-Path $nativeDir 'WindowTracker.cs') (Join-Path $nativeDir 'TrayRingIcon.cs') (Join-Path $nativeDir 'GlassUpdateToast.cs') (Join-Path $nativeDir 'UpdateDialog.cs') (Join-Path $nativeDir 'UpdateController.cs') (Join-Path $nativeDir 'Program.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Native app build failed.' }
 Write-Output 'Native app build PASS'

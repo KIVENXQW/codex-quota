@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Web.Script.Serialization;
+using Microsoft.Win32;
 
 namespace CodexQuota {
   static class Program {
@@ -26,7 +27,6 @@ namespace CodexQuota {
     }
   }
   sealed class QuotaApplication : ApplicationContext {
-    [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr icon);
     QuotaBadge badge;
     readonly Control positionDispatcher=new Control();
     readonly QuotaPopup popup=new QuotaPopup();
@@ -53,7 +53,7 @@ namespace CodexQuota {
     public QuotaApplication() {
       EnsureBadge();
       http.Timeout=TimeSpan.FromSeconds(45);
-      tray.Text="Codex 额度 · 正在读取";SetTrayIcon("—",false);tray.Visible=true;
+      tray.Text="Codex 额度 · 正在读取";SetTrayIcon(null,false);tray.Visible=true;
       var menu=new ContextMenuStrip();
       detailsItem=new ToolStripMenuItem("查看额度详情",null,delegate{ShowDetails(false);});menu.Items.Add(detailsItem);
       refreshItem=new ToolStripMenuItem("立即刷新",null,delegate{Refresh();});menu.Items.Add(refreshItem);
@@ -78,6 +78,8 @@ namespace CodexQuota {
       badge.SetState(state);popup.SetState(state);
       // This independent dispatcher survives destruction of the external parent and its child.
       IntPtr dispatcherHandle=positionDispatcher.Handle;
+      SystemEvents.UserPreferenceChanged+=OnSystemAppearanceChanged;
+      SystemEvents.DisplaySettingsChanged+=OnDisplaySettingsChanged;
       tracker.Changed+=delegate{QueuePosition();};
       // Keep the timer for IPC, discovery, and hook-failure recovery. Movement uses Changed.
       positionTimer.Interval=350;positionTimer.Tick+=delegate{if(exitEvent.WaitOne(0)){ExitThread();return;}if(showEvent.WaitOne(0))ShowDetails(false);Position();SaveStatus();};positionTimer.Start();
@@ -133,27 +135,29 @@ namespace CodexQuota {
       if(!state.Available)tip="Codex · "+T(state.Error??"额度暂不可用","Usage temporarily unavailable");
       if(popup.UpdateView.UpdateAvailable)tip+=T(" · 有更新"," · Update available");
       tray.Text=tip.Length>63?tip.Substring(0,63):tip;
-      SetTrayIcon(state.Stale?"!":value,state.Stale || !state.Available);
+      SetTrayIcon(primary==null||(!state.Available&&!state.Stale)?null:primary.Remaining,state.Stale);
     }
     static string ResetDate(long seconds) {
       return new DateTimeOffset(1970,1,1,0,0,0,TimeSpan.Zero).AddSeconds(seconds).ToOffset(TimeSpan.FromHours(8)).ToString("MM/dd HH:mm");
     }
-    void SetTrayIcon(string text,bool muted) {
-      using(var bitmap=new Bitmap(32,32))using(var g=Graphics.FromImage(bitmap)) {
-        g.SmoothingMode=SmoothingMode.AntiAlias;g.Clear(Color.Transparent);
-        using(var brush=new SolidBrush(muted?Color.FromArgb(135,140,145):preferences.AccentColor))
-        using(var font=new Font("Segoe UI",text.Length>=3?15:20,FontStyle.Bold,GraphicsUnit.Pixel)) {
-          var format=new StringFormat {Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center};
-          g.DrawString(text,font,brush,new RectangleF(0,0,32,29),format);g.FillRectangle(brush,6,29,20,2);format.Dispose();
+    static bool DarkTaskbar() {
+      try {
+        using(var key=Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")) {
+          object value=key==null?null:key.GetValue("SystemUsesLightTheme");
+          if(value is int)return (int)value==0;
         }
-        if(popup.UpdateView.UpdateAvailable) {
-          using(var border=new SolidBrush(Color.White))g.FillEllipse(border,23,0,9,9);
-          using(var dot=new SolidBrush(QuotaAppearance.Darken(preferences.AccentColor,.25f)))g.FillEllipse(dot,25,2,5,5);
-        }
-        IntPtr handle=bitmap.GetHicon();
-        Icon icon;using(var original=Icon.FromHandle(handle))icon=(Icon)original.Clone();DestroyIcon(handle);
-        var previous=tray.Icon;tray.Icon=icon;if(previous!=null)previous.Dispose();
-      }
+      }catch{}
+      return SystemColors.Control.GetBrightness()<.5f;
+    }
+    void OnSystemAppearanceChanged(object sender,UserPreferenceChangedEventArgs e){QueueTrayRefresh();}
+    void OnDisplaySettingsChanged(object sender,EventArgs e){QueueTrayRefresh();}
+    void QueueTrayRefresh() {
+      if(stopping||positionDispatcher.IsDisposed)return;
+      try{positionDispatcher.BeginInvoke((MethodInvoker)delegate{if(!stopping)RenderTray();});}catch(InvalidOperationException){}
+    }
+    void SetTrayIcon(double? remaining,bool stale) {
+      Icon icon=TrayRingIcon.Create(remaining,stale,preferences.AccentColor,DarkTaskbar(),popup.UpdateView.UpdateAvailable,SystemInformation.SmallIconSize);
+      var previous=tray.Icon;tray.Icon=icon;if(previous!=null)previous.Dispose();
     }
     void ShowDetails(bool nearBadge) {
       popup.SetState(state);
@@ -218,6 +222,8 @@ namespace CodexQuota {
       }catch{}
     }
     protected override void ExitThreadCore() {
+      SystemEvents.UserPreferenceChanged-=OnSystemAppearanceChanged;
+      SystemEvents.DisplaySettingsChanged-=OnDisplaySettingsChanged;
       stopping=true;tracker.Dispose();if(updater!=null)updater.Dispose();positionTimer.Stop();refreshTimer.Stop();tray.Visible=false;
       if(badge!=null)badge.Dispose();updateToast.Dispose();popup.Close();tray.Dispose();positionTimer.Dispose();refreshTimer.Dispose();positionDispatcher.Dispose();http.Dispose();showEvent.Dispose();exitEvent.Dispose();base.ExitThreadCore();
     }

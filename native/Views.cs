@@ -509,7 +509,8 @@ namespace CodexQuota
             heatRange.Text = heatStart.ToString("yyyy/MM/dd") + " — " + heatEnd.ToString("MM/dd") + "  ·  " + (heatPage + 1) + "/4";
             heatPrevious.Enabled = heatPage > 0; heatNext.Enabled = heatPage < 3;
             heatPrevious.AccessibleName = L("前一段活动", "Previous activity period"); heatNext.AccessibleName = L("后一段活动", "Next activity period");
-            heatmap.SetData(UsageAnalytics.BuildDaily(state, heatStart, heatEnd), preferences.AccentColor, English);
+            var annualScale=HeatmapScale.Create(UsageAnalytics.BuildDaily(state,today.AddDays(-364),today));
+            heatmap.SetData(UsageAnalytics.BuildDaily(state, heatStart, heatEnd), preferences.AccentColor, English,annualScale);
             heatmap.AccessibleName = L("Token 活动：", "Token activity: ") + heatRange.Text;
             recordTitle.Text = L("累计与记录", "Totals and records");
             string activityMark = hasActivity && state.Activity.Status != "ready" ? " *" : "";
@@ -573,7 +574,7 @@ namespace CodexQuota
                 chartTitle.SetBounds(0,y,Math.Max(Px(100),width-Px(138)),Px(34));tokens.SetBounds(width-Px(133),y,Px(64),Px(34));time.SetBounds(width-Px(63),y,Px(63),Px(34));
                 y+=Px(43);bars.SetBounds(0,y,width,Px(174));y+=Px(195);
                 heatTitle.SetBounds(0,y,width-Px(96),Px(34));heatPrevious.SetBounds(width-Px(90),y,Px(40),Px(34));heatNext.SetBounds(width-Px(42),y,Px(40),Px(34));y+=Px(39);
-                heatRange.SetBounds(0,y,width,Px(20));y+=Px(31);heatmap.SetBounds(0,y,width,Px(220));y+=Px(239);
+                heatRange.SetBounds(0,y,width,Px(20));y+=Px(31);heatmap.SetBounds(0,y,width,Px(248));y+=Px(267);
                 recordTitle.SetBounds(0,y,width,Px(24));y+=Px(34);records.SetBounds(0,y,width,Px(241));y+=Px(259);
                 int scopeHeight=Math.Max(Px(70),TextRenderer.MeasureText(scope.Text,small,new Size(width,0),TextFormatFlags.WordBreak).Height+Px(12));scope.SetBounds(0,y,width,scopeHeight);y+=scopeHeight+Px(10);mainPage.AutoScrollMinSize=new Size(0,y);
                 settingsLanguage.SetBounds(0,0,width,Px(24));chinese.SetBounds(0,Px(34),Px(88),Px(40));englishButton.SetBounds(Px(98),Px(34),Px(96),Px(40));

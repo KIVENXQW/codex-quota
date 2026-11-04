@@ -115,7 +115,7 @@ try {
 
     $archiveHash = (Get-FileHash -LiteralPath $stagedArchive -Algorithm SHA256).Hash.ToLowerInvariant()
     $stagedChecksum = $stagedArchive + '.sha256'
-    [System.IO.File]::WriteAllText($stagedChecksum, "$archiveHash  $archiveName" + [Environment]::NewLine, $utf8)
+    [System.IO.File]::WriteAllText($stagedChecksum, "$archiveHash  $archiveName`n", $utf8)
     if (-not (Test-Path -LiteralPath $outputDirectory -PathType Container)) {
         New-Item -ItemType Directory -Path $outputDirectory -ErrorAction Stop | Out-Null
     }
