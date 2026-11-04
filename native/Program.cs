@@ -32,6 +32,7 @@ namespace CodexQuota {
     readonly QuotaPopup popup=new QuotaPopup();
     readonly NotifyIcon tray=new NotifyIcon();
     readonly GlassUpdateToast updateToast=new GlassUpdateToast();
+    readonly CornerWidget corner=new CornerWidget();
     readonly WindowTracker tracker=new WindowTracker();
     readonly System.Windows.Forms.Timer positionTimer=new System.Windows.Forms.Timer();
     readonly System.Windows.Forms.Timer refreshTimer=new System.Windows.Forms.Timer();
@@ -61,6 +62,7 @@ namespace CodexQuota {
       updateItem=new ToolStripMenuItem("检查更新",null,delegate{if(updater!=null)updater.Check(true);});menu.Items.Add(updateItem);
       menu.Items.Add(new ToolStripSeparator());exitItem=new ToolStripMenuItem("退出额度工具",null,delegate{ExitThread();});menu.Items.Add(exitItem);tray.ContextMenuStrip=menu;
       tray.MouseClick+=delegate(object sender,MouseEventArgs e){if(e.Button==MouseButtons.Left) {if(popup.Visible)popup.Hide();else ShowDetails(false);}};
+      corner.ActivatedByUser+=delegate{if(popup.Visible)popup.Hide();else ShowDetails(false,true);};
       popup.RefreshRequested+=delegate{Refresh();};
       popup.OpenUpdateRequested+=delegate{ShowDetails(false);};
       updateToast.OpenRequested+=delegate{popup.ShowUpdates();};
@@ -73,7 +75,12 @@ namespace CodexQuota {
       updater=new UpdateController(root,preferences,tray,delegate{ExitThread();},popup.UpdateView);
       popup.UpdateView.StateChanged+=delegate{if(!stopping){if(!popup.UpdateView.UpdateAvailable)updateToast.Hide();RenderTray();}};
       updater.UpdateDetected+=delegate {
-        if(!stopping&&updater.Available!=null)updateToast.NotifyAvailable(updater.Available.Version,preferences,Screen.FromPoint(Cursor.Position).WorkingArea);
+        if(!stopping&&updater.Available!=null) {
+          Rectangle area=Screen.FromPoint(Cursor.Position).WorkingArea;
+          if(corner.Visible&&area.Contains(corner.Location)&&corner.Top-area.Top>=updateToast.Height+24)
+            area.Height=corner.Top-area.Top-12;
+          updateToast.NotifyAvailable(updater.Available.Version,preferences,area);
+        }
       };
       badge.SetState(state);popup.SetState(state);
       // This independent dispatcher survives destruction of the external parent and its child.
@@ -96,6 +103,9 @@ namespace CodexQuota {
     void ApplyPreferences() {
       EnsureBadge();
       badge.SetAppearance(preferences);
+      corner.ApplyPreferences(preferences);
+      corner.SetState(state);
+      PositionCorner();
       detailsItem.Text=T("查看额度详情","Usage details");refreshItem.Text=T("立即刷新","Refresh now");
       toggleItem.Text=T("头像上方显示额度","Show badge above avatar");exitItem.Text=T("退出额度工具","Quit quota companion");
       updateItem.Text=T("检查更新","Check for updates");if(updater!=null)updater.SetPreferences(preferences);
@@ -124,6 +134,7 @@ namespace CodexQuota {
     void Render() {
       EnsureBadge();
       badge.SetState(state);popup.SetState(state);
+      corner.SetState(state);PositionCorner();
       RenderTray();Position();SaveStatus(true);
     }
     void RenderTray() {
@@ -153,18 +164,31 @@ namespace CodexQuota {
     void OnDisplaySettingsChanged(object sender,EventArgs e){QueueTrayRefresh();}
     void QueueTrayRefresh() {
       if(stopping||positionDispatcher.IsDisposed)return;
-      try{positionDispatcher.BeginInvoke((MethodInvoker)delegate{if(!stopping)RenderTray();});}catch(InvalidOperationException){}
+      try{positionDispatcher.BeginInvoke((MethodInvoker)delegate{if(!stopping){RenderTray();PositionCorner();}});}catch(InvalidOperationException){}
+    }
+    void PositionCorner() {
+      if(stopping||corner.IsDisposed)return;
+      Screen screen=corner.Visible?Screen.FromRectangle(corner.Bounds):Screen.PrimaryScreen;
+      float scale=1;
+      using(Graphics graphics=Graphics.FromHwnd(IntPtr.Zero))scale=graphics.DpiX/96f;
+      corner.PositionAt(screen.WorkingArea,scale);
     }
     void SetTrayIcon(double? remaining,bool stale) {
-      Icon icon=TrayRingIcon.Create(remaining,stale,preferences.AccentColor,DarkTaskbar(),popup.UpdateView.UpdateAvailable,SystemInformation.SmallIconSize);
+      Icon icon=preferences.CornerStyle=="tray"
+        ?TrayTextIcon.Create(remaining,stale,preferences.AccentColor,DarkTaskbar(),popup.UpdateView.UpdateAvailable,SystemInformation.SmallIconSize)
+        :TrayRingIcon.Create(remaining,stale,preferences.AccentColor,DarkTaskbar(),popup.UpdateView.UpdateAvailable,SystemInformation.SmallIconSize);
       var previous=tray.Icon;tray.Icon=icon;if(previous!=null)previous.Dispose();
     }
-    void ShowDetails(bool nearBadge) {
+    void ShowDetails(bool nearBadge,bool nearCorner=false) {
       popup.SetState(state);
       Rectangle bounds=badge!=null&&!badge.IsDisposed?badge.ScreenBounds:Rectangle.Empty;
       nearBadge=nearBadge&&!bounds.IsEmpty;
       var area=Screen.FromPoint(nearBadge?bounds.Location:Cursor.Position).WorkingArea;
       Point desired=nearBadge?new Point(bounds.Right+10,bounds.Bottom-popup.Height):new Point(area.Right-popup.Width-12,area.Bottom-popup.Height-12);
+      if(nearCorner&&corner.Visible) {
+        area=Screen.FromRectangle(corner.Bounds).WorkingArea;
+        desired=new Point(corner.Right-popup.Width,corner.Top-popup.Height-10);
+      }
       popup.ShowAt(new Point(Math.Max(area.Left,Math.Min(desired.X,area.Right-popup.Width)),Math.Max(area.Top,Math.Min(desired.Y,area.Bottom-popup.Height))));
       SaveStatus(true);
     }
@@ -225,7 +249,7 @@ namespace CodexQuota {
       SystemEvents.UserPreferenceChanged-=OnSystemAppearanceChanged;
       SystemEvents.DisplaySettingsChanged-=OnDisplaySettingsChanged;
       stopping=true;tracker.Dispose();if(updater!=null)updater.Dispose();positionTimer.Stop();refreshTimer.Stop();tray.Visible=false;
-      if(badge!=null)badge.Dispose();updateToast.Dispose();popup.Close();tray.Dispose();positionTimer.Dispose();refreshTimer.Dispose();positionDispatcher.Dispose();http.Dispose();showEvent.Dispose();exitEvent.Dispose();base.ExitThreadCore();
+      if(badge!=null)badge.Dispose();corner.Dispose();updateToast.Dispose();popup.Close();tray.Dispose();positionTimer.Dispose();refreshTimer.Dispose();positionDispatcher.Dispose();http.Dispose();showEvent.Dispose();exitEvent.Dispose();base.ExitThreadCore();
     }
   }
 }

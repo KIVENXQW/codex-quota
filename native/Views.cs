@@ -11,7 +11,7 @@ namespace CodexQuota
     internal static class QuotaAppearance
     {
         internal static readonly Color Text = Color.FromArgb(35, 38, 43);
-        internal static readonly Color Muted = Color.FromArgb(114, 121, 129);
+        internal static readonly Color Muted = Color.FromArgb(107, 103, 116);
         internal static readonly Color Line = Color.FromArgb(229, 232, 236);
         internal static readonly Color Green = Color.FromArgb(218, 145, 170);
         internal static readonly Color Mint = Color.FromArgb(250, 238, 243);
@@ -308,38 +308,68 @@ namespace CodexQuota
     internal sealed class RoundedButton : Button
     {
         internal Color Accent = QuotaAppearance.Green;
-        internal bool Selected;
+        private bool selected;
+        internal bool Selected
+        {
+            get { return selected; }
+            set
+            {
+                if (selected == value) return;
+                selected = value;
+                GlassSegmentRail rail = Parent as GlassSegmentRail;
+                if (value && rail != null) rail.SelectButton(this);
+                Invalidate();
+            }
+        }
         private bool hover;
         internal RoundedButton()
         {
             FlatStyle = FlatStyle.Flat; FlatAppearance.BorderSize = 0; Cursor = Cursors.Hand; BackColor = Color.White;
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
         }
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override bool IsInputKey(Keys keyData) { Keys key = keyData & Keys.KeyCode; return Parent is GlassSegmentRail && (key == Keys.Left || key == Keys.Right || key == Keys.Up || key == Keys.Down) || base.IsInputKey(keyData); }
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            GlassSegmentRail rail = Parent as GlassSegmentRail;
+            if (rail != null && (e.KeyCode == Keys.Left || e.KeyCode == Keys.Right || e.KeyCode == Keys.Up || e.KeyCode == Keys.Down))
+            {
+                RoundedButton next = rail.AdjacentButton(this, e.KeyCode == Keys.Left || e.KeyCode == Keys.Up ? -1 : 1);
+                if (next != null && next.Enabled) { next.Focus(); next.OnClick(EventArgs.Empty); }
+                e.Handled = true; e.SuppressKeyPress = true;
+            }
+            base.OnKeyDown(e);
+        }
         protected override void OnPaint(PaintEventArgs e)
         {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias; e.Graphics.Clear(BackColor);
-            float radius = Math.Min(14, Height * .36f);
-            Color fill = Selected ? QuotaAppearance.Blend(Accent, Color.White, hover ? .65f : .78f) : hover ? Color.White : Color.FromArgb(249, 248, 252);
-            using (Brush shadow = new SolidBrush(Color.FromArgb(16, 65, 45, 65)))
-            using (GraphicsPath path = QuotaAppearance.RoundRectangle(new RectangleF(1, 3, Width - 2, Height - 4), radius)) e.Graphics.FillPath(shadow, path);
-            using (Brush brush = new LinearGradientBrush(new Rectangle(0, 0, Math.Max(1, Width), Math.Max(1, Height)), Color.White, fill, 90f))
-            using (GraphicsPath path = QuotaAppearance.RoundRectangle(new RectangleF(.5f, .5f, Width - 2, Height - 3), radius))
-            using (Pen edge = new Pen(Color.FromArgb(220, Color.White))) { e.Graphics.FillPath(brush, path); e.Graphics.DrawPath(edge, path); }
-            TextRenderer.DrawText(e.Graphics, Text, Font, ClientRectangle, !Enabled ? Color.FromArgb(158, 153, 162) : Selected ? QuotaAppearance.Darken(Accent, .55f) : QuotaAppearance.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
-            if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -3, -3));
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            bool segmented = Parent is GlassSegmentRail;
+            float factor = Math.Max(1, Font.Size / 13f), radius = Math.Min(14 * factor, Height * .36f);
+            if (!segmented)
+                GlassMaterial.Surface(e.Graphics, new RectangleF(1, 1, Math.Max(1, Width - 3), Math.Max(1, Height - 5)), radius,
+                    Selected ? QuotaAppearance.Blend(Accent, Color.White, hover ? .81f : .88f) : hover ? Color.White : Color.FromArgb(245, 243, 250), factor, true);
+            else if (hover && !Selected)
+                using (GraphicsPath path = QuotaAppearance.RoundRectangle(new RectangleF(1, 1, Width - 2, Height - 2), radius))
+                using (Brush fill = new SolidBrush(Color.FromArgb(45, Color.White))) e.Graphics.FillPath(fill, path);
+            Color textColor = !Enabled ? Color.FromArgb(158, 153, 162) : segmented ? (Selected ? QuotaAppearance.Text : QuotaAppearance.Muted) : Selected ? QuotaAppearance.Darken(Accent, .45f) : QuotaAppearance.Text;
+            using (Font textFont = new Font(Font, Selected && segmented ? FontStyle.Bold : Font.Style))
+                TextRenderer.DrawText(e.Graphics, Text, textFont, ClientRectangle, textColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
+            if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -5, -5), QuotaAppearance.Darken(Accent, .4f), BackColor);
         }
     }
 
     public sealed class QuotaPopup : Form
     {
         private readonly float scale;
-        private readonly Font regular, small, valueFont;
+        private readonly Font regular, small, valueFont, headingFont;
         private readonly Label title, footer, rangeTitle, chartTitle, heatTitle, recordTitle, scope, homeDate, homeTasks, homeNote, heatRange;
         private readonly RoundedButton appearance, refresh, close, back, day, week, month, tokens, time, chinese, englishButton, homeTab, historyTab, updateEntry, homeDay, homeWeek, homeMonth, homeAll, heatPrevious, heatNext;
         private readonly Panel mainPage, homePage, settingsPage, updatePage;
-        private readonly Label settingsLanguage, settingsAccent, settingsCustom, settingsHint;
+        private readonly Label settingsLanguage, settingsAccent, settingsCustom, settingsHint, settingsCorner, settingsTransparency, transparencyValue, settingsSaved;
+        private readonly RoundedButton cornerCard, cornerCapsule, cornerTray;
+        private readonly GlassSegmentRail navigationRail, homePeriodRail, historyPeriodRail, metricRail, languageRail, cornerRail;
+        private readonly GlassTransparencySlider glassTransparency;
         private readonly AccentPalette palette;
         private readonly QuotaSummaryView quota;
         private readonly MetricCards overview, summary, records;
@@ -352,8 +382,9 @@ namespace CodexQuota
         private QuotaState state;
         private UserPreferences preferences = new UserPreferences();
         private string period = "day", homePeriod = "day", page = "home", returnPage = "home";
+        private string appliedLanguage, appliedAccent;
         private int heatPage = 3, motionDistance;
-        private bool timeMetric, pageMotion, layingOut;
+        private bool timeMetric, pageMotion, layingOut, applyingPreferences, appearanceInitialized;
         public event EventHandler RefreshRequested;
         public event EventHandler PreferencesChanged;
         public event EventHandler OpenUpdateRequested;
@@ -371,10 +402,11 @@ namespace CodexQuota
             ShowInTaskbar = false; TopMost = true; KeyPreview = true; DoubleBuffered = true;
             BackColor = Color.FromArgb(246,243,249); ForeColor = QuotaAppearance.Text; Text = "Codex";
             regular = new Font("Microsoft YaHei UI", 13 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
-            small = new Font("Microsoft YaHei UI", 11 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
-            valueFont = new Font("Microsoft YaHei UI", 22 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
+            small = new Font("Microsoft YaHei UI", 12 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
+            valueFont = new Font("Microsoft YaHei UI", 25 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
+            headingFont = new Font("Microsoft YaHei UI", 15 * scale, FontStyle.Bold, GraphicsUnit.Pixel);
             Font = regular;
-            title = LabelFor("Codex", regular, QuotaAppearance.Text); Controls.Add(title);
+            title = LabelFor("Codex", headingFont, QuotaAppearance.Text); Controls.Add(title);
             appearance = ButtonFor("", delegate { Navigate("settings"); }); Controls.Add(appearance);
             refresh = ButtonFor("", delegate { EventHandler handler = RefreshRequested; if (handler != null) handler(this, EventArgs.Empty); }); Controls.Add(refresh);
             close = ButtonFor("×", delegate { Hide(); }); Controls.Add(close);
@@ -382,6 +414,7 @@ namespace CodexQuota
             updateEntry = ButtonFor("", delegate { ShowUpdates(); }); updateEntry.Name = "updateEntry"; Controls.Add(updateEntry);
             homeTab = ButtonFor("", delegate { Navigate("home"); }); homeTab.Name = "homeTab"; Controls.Add(homeTab);
             historyTab = ButtonFor("", delegate { Navigate("history"); }); historyTab.Name = "historyTab"; Controls.Add(historyTab);
+            navigationRail = new GlassSegmentRail(scale, "mainNavigation", homeTab, historyTab); Controls.Add(navigationRail);
             homePage = PagePanel("homePage"); mainPage = PagePanel("historyPage"); settingsPage = PagePanel("settingsPage"); updatePage = PagePanel("updatePage");
             footer = LabelFor("", small, QuotaAppearance.Muted); Controls.Add(footer);
             homeDate = LabelFor("", small, QuotaAppearance.Muted); homePage.Controls.Add(homeDate);
@@ -389,6 +422,7 @@ namespace CodexQuota
             homeWeek = ButtonFor("", delegate { SetHomePeriod("week"); }); homePage.Controls.Add(homeWeek);
             homeMonth = ButtonFor("", delegate { SetHomePeriod("month"); }); homePage.Controls.Add(homeMonth);
             homeAll = ButtonFor("", delegate { SetHomePeriod("all"); }); homePage.Controls.Add(homeAll);
+            homePeriodRail = new GlassSegmentRail(scale, "homePeriods", homeDay, homeWeek, homeMonth, homeAll); homePage.Controls.Add(homePeriodRail);
             overview = new MetricCards(scale, small, valueFont, 2); overview.Name = "overview"; homePage.Controls.Add(overview);
             homeTasks = LabelFor("", regular, QuotaAppearance.Text); homePage.Controls.Add(homeTasks);
             quota = new QuotaSummaryView(scale, regular, small, valueFont); homePage.Controls.Add(quota);
@@ -401,6 +435,8 @@ namespace CodexQuota
             month = ButtonFor("", delegate { SetPeriod("month"); }); mainPage.Controls.Add(month);
             tokens = ButtonFor("Tokens", delegate { timeMetric = false; UpdateData(); }); mainPage.Controls.Add(tokens);
             time = ButtonFor("", delegate { timeMetric = true; UpdateData(); }); mainPage.Controls.Add(time);
+            historyPeriodRail = new GlassSegmentRail(scale, "historyPeriods", day, week, month); mainPage.Controls.Add(historyPeriodRail);
+            metricRail = new GlassSegmentRail(scale, "historyMetrics", tokens, time); mainPage.Controls.Add(metricRail);
             bars = new UsageBarChart(scale); mainPage.Controls.Add(bars);
             heatTitle = LabelFor("", regular, QuotaAppearance.Text); mainPage.Controls.Add(heatTitle);
             heatRange = LabelFor("", small, QuotaAppearance.Muted); mainPage.Controls.Add(heatRange);
@@ -413,6 +449,16 @@ namespace CodexQuota
             settingsLanguage = LabelFor("", regular, QuotaAppearance.Text); settingsPage.Controls.Add(settingsLanguage);
             chinese = ButtonFor("中文", delegate { preferences.Language = "zh"; NotifyPreferences(); }); settingsPage.Controls.Add(chinese);
             englishButton = ButtonFor("English", delegate { preferences.Language = "en"; NotifyPreferences(); }); settingsPage.Controls.Add(englishButton);
+            languageRail = new GlassSegmentRail(scale, "languageChoices", chinese, englishButton); settingsPage.Controls.Add(languageRail);
+            settingsCorner = LabelFor("", regular, QuotaAppearance.Text); settingsPage.Controls.Add(settingsCorner);
+            cornerCard = ButtonFor("", delegate { preferences.CornerStyle = "card"; NotifyPreferences(); }); cornerCard.Name = "cornerCard";
+            cornerCapsule = ButtonFor("", delegate { preferences.CornerStyle = "capsule"; NotifyPreferences(); }); cornerCapsule.Name = "cornerCapsule";
+            cornerTray = ButtonFor("", delegate { preferences.CornerStyle = "tray"; NotifyPreferences(); }); cornerTray.Name = "cornerTray";
+            cornerRail = new GlassSegmentRail(scale, "cornerChoices", cornerCard, cornerCapsule, cornerTray); settingsPage.Controls.Add(cornerRail);
+            settingsTransparency = LabelFor("", regular, QuotaAppearance.Text); settingsPage.Controls.Add(settingsTransparency);
+            transparencyValue = LabelFor("", regular, QuotaAppearance.Text); transparencyValue.Name = "transparencyValue"; transparencyValue.TextAlign = ContentAlignment.MiddleRight; settingsPage.Controls.Add(transparencyValue);
+            glassTransparency = new GlassTransparencySlider(scale); glassTransparency.Name = "glassTransparency"; settingsPage.Controls.Add(glassTransparency);
+            glassTransparency.ValueChanged += delegate { if (!applyingPreferences) { preferences.GlassTransparency = glassTransparency.Value; NotifyPreferences(); } };
             settingsAccent = LabelFor("", regular, QuotaAppearance.Text); settingsPage.Controls.Add(settingsAccent);
             settingsCustom = LabelFor("", small, QuotaAppearance.Muted); settingsPage.Controls.Add(settingsCustom);
             palette = new AccentPalette(scale, regular);
@@ -422,6 +468,7 @@ namespace CodexQuota
             };
             settingsPage.Controls.Add(palette);
             settingsHint = LabelFor("", small, QuotaAppearance.Muted); settingsHint.TextAlign = ContentAlignment.TopLeft; settingsPage.Controls.Add(settingsHint);
+            settingsSaved = LabelFor("", small, QuotaAppearance.Muted); settingsSaved.TextAlign = ContentAlignment.TopLeft; settingsPage.Controls.Add(settingsSaved);
             updateView = new GlassUpdateView(preferences); updatePage.Controls.Add(updateView);
             updateView.OpenRequested += delegate { ShowUpdates(); };
             updateView.BackRequested += delegate { Navigate(returnPage); };
@@ -434,7 +481,7 @@ namespace CodexQuota
             };
             ApplyPreferences(new UserPreferences());
         }
-        private Panel PagePanel(string name) { var panel = new Panel { Name = name, AutoScroll = true, BackColor = Color.FromArgb(247,244,249) }; Controls.Add(panel); return panel; }
+        private Panel PagePanel(string name) { var panel = new GlassPagePanel { Name = name, AutoScroll = true }; Controls.Add(panel); return panel; }
         private Label LabelFor(string text, Font font, Color color) {
             return new Label { Text = text, Font = font, ForeColor = color, BackColor = Color.Transparent, AutoEllipsis = true, UseMnemonic = false, TextAlign = ContentAlignment.MiddleLeft };
         }
@@ -443,17 +490,28 @@ namespace CodexQuota
         public void ApplyPreferences(UserPreferences prefs) {
             if (IsDisposed) return;
             if (InvokeRequired) { BeginInvoke(new Action<UserPreferences>(ApplyPreferences), prefs); return; }
-            preferences = new UserPreferences { Language = prefs != null && prefs.Language == "en" ? "en" : "zh", AccentHtml = prefs == null ? "#DA91AA" : prefs.AccentHtml };
+            UserPreferences next = new UserPreferences { Language = prefs != null && prefs.Language == "en" ? "en" : "zh", AccentHtml = prefs == null ? "#DA91AA" : prefs.AccentHtml, CornerStyle = prefs == null ? "card" : prefs.CornerStyle, GlassTransparency = prefs == null ? 45 : prefs.GlassTransparency };
+            next.Normalize();
+            bool cornerOnly = appearanceInitialized && next.Language == appliedLanguage && next.AccentHtml == appliedAccent;
+            preferences = next;
+            applyingPreferences = true;
+            glassTransparency.Value = preferences.GlassTransparency;
+            applyingPreferences = false;
+            if (cornerOnly) { UpdateSettings(); return; }
             BackColor = Surface;
-            foreach (Panel panel in new[] { homePage, mainPage, settingsPage, updatePage }) panel.BackColor = Surface;
             palette.SetLanguage(English); palette.SetColor(preferences.AccentColor);
+            palette.BackColor = Surface;
             updateView.ApplyPreferences(preferences);
-            foreach (RoundedButton button in Buttons()) { button.Accent = preferences.AccentColor; button.BackColor = Surface; button.Invalidate(); }
-            foreach (MetricCards cards in new[] { overview, summary, records }) { cards.Accent = preferences.AccentColor; cards.BackColor = Surface; }
-            quota.BackColor = bars.BackColor = heatmap.BackColor = Surface;
+            foreach (RoundedButton button in Buttons()) { button.Accent = preferences.AccentColor; button.BackColor = Color.Transparent; button.Invalidate(); }
+            foreach (GlassSegmentRail rail in new[] { navigationRail, homePeriodRail, historyPeriodRail, metricRail, languageRail, cornerRail }) { rail.Accent = preferences.AccentColor; rail.Invalidate(true); }
+            foreach (MetricCards cards in new[] { overview, summary, records }) { cards.Accent = preferences.AccentColor; }
+            bars.BackColor = heatmap.BackColor = Surface;
+            glassTransparency.Accent = preferences.AccentColor;
+            appearanceInitialized = true;
+            appliedLanguage = preferences.Language; appliedAccent = preferences.AccentHtml;
             UpdateData();
         }
-        private RoundedButton[] Buttons() { return new[] { appearance,refresh,close,back,day,week,month,tokens,time,chinese,englishButton,homeTab,historyTab,updateEntry,homeDay,homeWeek,homeMonth,homeAll,heatPrevious,heatNext }; }
+        private RoundedButton[] Buttons() { return new[] { appearance,refresh,close,back,day,week,month,tokens,time,chinese,englishButton,homeTab,historyTab,updateEntry,homeDay,homeWeek,homeMonth,homeAll,heatPrevious,heatNext,cornerCard,cornerCapsule,cornerTray }; }
         private void NotifyPreferences() { ApplyPreferences(preferences); EventHandler handler = PreferencesChanged; if (handler != null) handler(this, EventArgs.Empty); }
         public void SetState(QuotaState next) {
             if (IsDisposed) return;
@@ -493,7 +551,8 @@ namespace CodexQuota
             string quotaHint = reset.HasValue ? L("重置 ", "Resets ") + reset.Value.ToString("MM/dd HH:mm") : L("重置时间暂不可用", "Reset time unavailable");
             overview.SetItems(new[] { L("Token 总消耗", "Total Tokens"), L("账户剩余额度", "Quota remaining"), L("AI 工作时长", "AI work time"), L("平均消耗速度", "Tokens per work hour") },
                 new[] { UsageText.Number(totalTokens, true), primary == null ? "—" : QuotaAppearance.Percentage(primary.Remaining), UsageText.Duration(work, English, false), "—" },
-                new[] { tokenHint, quotaHint, workHint, L("缺少相同范围的用量数据", "Matching usage data unavailable") });
+                new[] { tokenHint, quotaHint, workHint, L("缺少相同范围的用量数据", "No matching usage data") });
+            overview.SetQuota(primary == null ? null : primary.Remaining, state == null || state.Stale || !state.Available);
             homeDate.Text = homePeriod == "all" ? L("账户累计与本机已记录活动", "Account totals and recorded local activity") : homeStart.ToString("yyyy/MM/dd") + (homeStart != today ? " — " + today.ToString("MM/dd") : "") + "  UTC+8";
             homeTasks.Text = (tasks.HasValue ? tasks.Value.ToString("N0") : "—") + L(" 个已完成任务", " completed tasks") + (homePeriod == "all" ? L(" · 本机记录", " · this PC") : homeTotals.WorkPartial ? L(" · 部分记录", " · partial coverage") : "");
             quota.SetData(state, preferences.AccentColor, English);
@@ -517,11 +576,22 @@ namespace CodexQuota
             records.SetItems(new[] { L("累计 Tokens", "All-time Tokens"), L("单日峰值", "Peak daily Tokens"), L("本机工作时长", "Recorded work time") + activityMark, L("本机完成任务", "Recorded tasks") + activityMark, L("最长单次工作", "Longest AI turn"), L("连续天数 · 当前 / 最长", "Streak · current / best") },
                 new[] { UsageText.Number(state == null ? null : state.LifetimeTokens, true), UsageText.Number(state == null ? null : state.PeakDailyTokens, true), UsageText.Duration(hasActivity ? (double?)state.Activity.TotalWorkSeconds : null, English, false), hasActivity ? state.Activity.CompletedTasks.ToString("N0") : "—", UsageText.Duration(state == null ? null : state.LongestRunningTurnSec, English, false), (state == null || !state.CurrentStreakDays.HasValue ? "—" : state.CurrentStreakDays.Value.ToString()) + " / " + (state == null || !state.LongestStreakDays.HasValue ? "—" : state.LongestStreakDays.Value.ToString()) });
             scope.Text = ScopeText(totals); footer.Text = FooterText();
-            settingsLanguage.Text = L("语言", "Language"); settingsAccent.Text = L("主题色", "Accent color"); settingsCustom.Text = L("预设色与自定义调色", "Presets and custom palette");
-            settingsHint.Text = L("配色同步到头像标记、图表和系统托盘。设置自动保存在本机。", "Your accent colors the badge, charts and tray. Preferences are saved on this PC.");
-            chinese.Selected = !English; englishButton.Selected = English;
+            UpdateSettings();
             foreach (RoundedButton button in Buttons()) button.Invalidate();
             LayoutPage(); Invalidate();
+        }
+        private void UpdateSettings() {
+            settingsLanguage.Text = L("语言", "Language"); settingsAccent.Text = L("主题色", "Accent color"); settingsCustom.Text = L("预设色与自定义调色", "Presets and custom palette");
+            settingsCorner.Text = L("右下角显示", "Corner display");
+            cornerCard.Text = L("双行玻璃卡", "Glass card"); cornerCapsule.Text = L("玻璃胶囊", "Glass capsule"); cornerTray.Text = L("极简数字托盘", "Number in tray");
+            cornerCard.Selected = preferences.CornerStyle == "card"; cornerCapsule.Selected = preferences.CornerStyle == "capsule"; cornerTray.Selected = preferences.CornerStyle == "tray";
+            settingsTransparency.Text = L("角落玻璃透明度", "Corner glass transparency");
+            glassTransparency.AccessibleName = settingsTransparency.Text;
+            glassTransparency.Enabled = preferences.CornerStyle != "tray";
+            transparencyValue.Text = preferences.GlassTransparency.ToString() + "%";
+            settingsHint.Text = preferences.CornerStyle == "tray" ? L("数字托盘没有玻璃背景。选择玻璃卡或胶囊后可调整透明度。", "The tray number has no glass background. Choose a card or capsule to adjust transparency.") : L("仅调整角落浮窗的玻璃背景，数值和文字始终清晰。数值越大，背景越透明。", "Adjusts the corner glass background only; text stays clear. Higher values make the background more transparent.");
+            settingsSaved.Text = L("配色同步到头像标记、图表和右下角入口。设置自动保存在本机。", "Your accent colors the badge, charts and corner display. Preferences are saved on this PC.");
+            chinese.Selected = !English; englishButton.Selected = English;
         }
         private string ScopeText(UsageSummary totals) {
             string text = L("Tokens：账户统计。工作时长与完成任务：本机采集。", "Tokens: account usage. Work time and tasks: this PC.");
@@ -544,41 +614,48 @@ namespace CodexQuota
                 var scrolls = new Point[panels.Length];
                 for (int i = 0; i < panels.Length; i++) { scrolls[i] = new Point(-panels[i].AutoScrollPosition.X,-panels[i].AutoScrollPosition.Y); panels[i].SuspendLayout(); panels[i].AutoScrollPosition = Point.Empty; }
                 Rectangle work = Screen.FromPoint(Visible ? targetLocation : requestedPoint).WorkingArea;
-                Size = new Size(Math.Min(Px(448), Math.Max(Px(300), work.Width-Px(16))), Math.Min(Px(664),Math.Max(Px(360),work.Height-Px(16))));
+                Size = new Size(Math.Min(Px(448), Math.Max(1, work.Width-Px(16))), Math.Min(Px(732),Math.Max(1,work.Height-Px(16))));
                 title.SetBounds(Px(18),Px(14),Px(110),Px(32));
                 int right = Width-Px(14);
                 close.SetBounds(right-Px(32),Px(12),Px(32),Px(36)); right-=Px(38);
                 refresh.SetBounds(right-Px(56),Px(12),Px(56),Px(36)); right-=Px(62);
-                appearance.SetBounds(right-Px(50),Px(12),Px(50),Px(36)); right-=Px(56);
+                appearance.Visible=page!="settings";
+                appearance.SetBounds(right-Px(50),Px(12),Px(50),Px(36)); if(page!="settings")right-=Px(56);
                 updateEntry.SetBounds(right-Px(68),Px(12),Px(68),Px(36)); updateEntry.Visible=updateView.UpdateAvailable||updateView.Busy;
-                title.Width=Math.Max(Px(20),(updateView.UpdateAvailable||updateView.Busy?updateEntry.Left:appearance.Left)-title.Left-Px(8));
+                title.Width=Math.Max(Px(20),(updateView.UpdateAvailable||updateView.Busy?updateEntry.Left:page=="settings"?refresh.Left:appearance.Left)-title.Left-Px(8));
                 bool auxiliary=page=="settings"||page=="update";
-                homeTab.SetBounds(Px(15),Px(59),(Width-Px(36))/2,Px(44)); historyTab.SetBounds(homeTab.Right+Px(6),Px(59),(Width-Px(36))/2,Px(44));
-                homeTab.Visible=historyTab.Visible=!auxiliary;
+                navigationRail.SetBounds(Px(14),Px(59),Width-Px(28),Px(49));
+                navigationRail.Visible=homeTab.Visible=historyTab.Visible=!auxiliary;
                 back.SetBounds(Px(16),Px(59),Px(88),Px(42)); back.Visible=page=="settings";
-                int bodyTop = page=="update"?Px(58):Px(116);
-                foreach(var panel in panels)panel.SetBounds(Px(16),bodyTop,Width-Px(32),Height-bodyTop-Px(42));
+                int bodyTop = page=="update"?Px(58):Px(122);
+                foreach(var panel in panels)panel.SetBounds(Px(20),bodyTop,Math.Max(1,Width-Px(40)),Math.Max(1,Height-bodyTop-Px(42)));
                 homePage.Visible=page=="home";mainPage.Visible=page=="history";settingsPage.Visible=page=="settings";updatePage.Visible=page=="update";
                 footer.SetBounds(Px(18),Height-Px(31),Width-Px(36),Px(22));
-                int width=homePage.Width-SystemInformation.VerticalScrollBarWidth-Px(2);
-                int buttonWidth=(width-Px(18))/4;
-                homeDay.SetBounds(0,0,buttonWidth,Px(36));homeWeek.SetBounds(buttonWidth+Px(6),0,buttonWidth,Px(36));homeMonth.SetBounds((buttonWidth+Px(6))*2,0,buttonWidth,Px(36));homeAll.SetBounds((buttonWidth+Px(6))*3,0,buttonWidth,Px(36));
-                homeDate.SetBounds(0,Px(43),width,Px(20));overview.SetBounds(0,Px(72),width,Px(196));homeTasks.SetBounds(Px(2),Px(281),width-Px(4),Px(30));
-                quota.SetBounds(0,Px(327),width,Px(quota.DesiredHeight));
-                int homeNoteHeight=Math.Max(Px(54),TextRenderer.MeasureText(homeNote.Text,small,new Size(width,0),TextFormatFlags.WordBreak).Height+Px(10));
+                int width=Math.Max(1,homePage.Width-Px(2));
+                int estimatedNoteHeight=Math.Max(Px(60),TextRenderer.MeasureText(homeNote.Text,small,new Size(width,0),TextFormatFlags.WordBreak).Height+Px(10));
+                bool homeScroll=Px(360+quota.DesiredHeight+15+8)+estimatedNoteHeight>homePage.Height;
+                if(homeScroll)width=Math.Max(1,width-SystemInformation.VerticalScrollBarWidth);
+                homePeriodRail.SetBounds(0,0,width,Px(44));
+                homeDate.SetBounds(0,Px(51),width,Px(24));overview.SetBounds(0,Px(82),width,Px(226));homeTasks.SetBounds(Px(2),Px(317),width-Px(4),Px(28));
+                quota.SetBounds(0,Px(360),width,Px(quota.DesiredHeight));
+                int homeNoteHeight=Math.Max(Px(60),TextRenderer.MeasureText(homeNote.Text,small,new Size(width,0),TextFormatFlags.WordBreak).Height+Px(10));
                 homeNote.SetBounds(Px(2),quota.Bottom+Px(15),width-Px(4),homeNoteHeight);homePage.AutoScrollMinSize=new Size(0,homeNote.Bottom+Px(8));
+                width=Math.Max(1,mainPage.Width-SystemInformation.VerticalScrollBarWidth-Px(2));
                 int y=0;
                 rangeTitle.SetBounds(0,y,Math.Max(Px(100),width-Px(156)),Px(34));
-                int segment=Px(48);day.SetBounds(width-segment*3,y,segment-Px(4),Px(34));week.SetBounds(width-segment*2,y,segment-Px(4),Px(34));month.SetBounds(width-segment,y,segment,Px(34));
-                y+=Px(46);summary.SetBounds(0,y,width,Px(78));y+=Px(99);
-                chartTitle.SetBounds(0,y,Math.Max(Px(100),width-Px(138)),Px(34));tokens.SetBounds(width-Px(133),y,Px(64),Px(34));time.SetBounds(width-Px(63),y,Px(63),Px(34));
+                historyPeriodRail.SetBounds(width-Px(150),y,Px(150),Px(36));
+                y+=Px(48);summary.SetBounds(0,y,width,Px(86));y+=Px(105);
+                chartTitle.SetBounds(0,y,Math.Max(Px(100),width-Px(138)),Px(34));metricRail.SetBounds(width-Px(136),y,Px(136),Px(36));
                 y+=Px(43);bars.SetBounds(0,y,width,Px(174));y+=Px(195);
                 heatTitle.SetBounds(0,y,width-Px(96),Px(34));heatPrevious.SetBounds(width-Px(90),y,Px(40),Px(34));heatNext.SetBounds(width-Px(42),y,Px(40),Px(34));y+=Px(39);
                 heatRange.SetBounds(0,y,width,Px(20));y+=Px(31);heatmap.SetBounds(0,y,width,Px(248));y+=Px(267);
                 recordTitle.SetBounds(0,y,width,Px(24));y+=Px(34);records.SetBounds(0,y,width,Px(241));y+=Px(259);
                 int scopeHeight=Math.Max(Px(70),TextRenderer.MeasureText(scope.Text,small,new Size(width,0),TextFormatFlags.WordBreak).Height+Px(12));scope.SetBounds(0,y,width,scopeHeight);y+=scopeHeight+Px(10);mainPage.AutoScrollMinSize=new Size(0,y);
-                settingsLanguage.SetBounds(0,0,width,Px(24));chinese.SetBounds(0,Px(34),Px(88),Px(40));englishButton.SetBounds(Px(98),Px(34),Px(96),Px(40));
-                settingsAccent.SetBounds(0,Px(102),width,Px(25));settingsCustom.SetBounds(0,Px(132),width,Px(23));palette.SetBounds(0,Px(165),width,Px(296));settingsHint.SetBounds(0,Px(482),width,Px(65));settingsPage.AutoScrollMinSize=new Size(0,Px(555));
+                settingsCorner.SetBounds(0,0,width,Px(24));cornerRail.SetBounds(0,Px(33),width,Px(46));
+                settingsTransparency.SetBounds(0,Px(102),width-Px(52),Px(25));transparencyValue.SetBounds(width-Px(48),Px(102),Px(48),Px(25));
+                glassTransparency.SetBounds(0,Px(135),width,Px(38));settingsHint.SetBounds(0,Px(182),width,Px(61));
+                settingsLanguage.SetBounds(0,Px(260),width,Px(24));languageRail.SetBounds(0,Px(292),Px(220),Px(44));
+                settingsAccent.SetBounds(0,Px(366),width,Px(25));settingsCustom.SetBounds(0,Px(395),width,Px(23));palette.SetBounds(0,Px(429),width,Px(296));settingsSaved.SetBounds(0,Px(744),width,Px(64));settingsPage.AutoScrollMinSize=new Size(0,Px(816));
                 updateView.SetBounds(0,0,updatePage.Width,updatePage.Height);updatePage.AutoScrollMinSize=Size.Empty;
                 for(int i=0;i<panels.Length;i++){panels[i].ResumeLayout();panels[i].AutoScrollPosition=scrolls[i];}
                 Region old=Region;using(GraphicsPath path=QuotaAppearance.RoundRectangle(new RectangleF(0,0,Width,Height),Px(22)))Region=new Region(path);if(old!=null)old.Dispose();
@@ -606,19 +683,25 @@ namespace CodexQuota
             double progress=Math.Min(1,animationClock.Elapsed.TotalMilliseconds/200),eased=1-Math.Pow(1-progress,3);
             Opacity=.82+.18*eased;
             if(!pageMotion)Location=new Point(targetLocation.X,targetLocation.Y+(int)Math.Round(motionDistance*(1-eased)));
-            else {Panel active=page=="home"?homePage:page=="history"?mainPage:page=="settings"?settingsPage:updatePage;active.Left=Px(16)+(int)Math.Round(motionDistance*(1-eased));}
+            else {Panel active=page=="home"?homePage:page=="history"?mainPage:page=="settings"?settingsPage:updatePage;active.Left=Px(20)+(int)Math.Round(motionDistance*(1-eased));}
             if(progress>=1){animation.Stop();animationClock.Reset();Location=targetLocation;Opacity=1;LayoutPage();}
         }
         protected override void OnFormClosing(FormClosingEventArgs e){if(e.CloseReason==CloseReason.UserClosing){e.Cancel=true;Hide();}base.OnFormClosing(e);}
         protected override void OnPaintBackground(PaintEventArgs e) {
-            using(var fill=new LinearGradientBrush(ClientRectangle,QuotaAppearance.Blend(preferences.AccentColor,Color.White,.84f),Color.FromArgb(242,244,250),45f))e.Graphics.FillRectangle(fill,ClientRectangle);
+            if(Width<1||Height<1)return;
+            using(var fill=new LinearGradientBrush(ClientRectangle,QuotaAppearance.Blend(preferences.AccentColor,Color.FromArgb(246,243,249),.86f),Color.FromArgb(246,247,251),55f))e.Graphics.FillRectangle(fill,ClientRectangle);
+            using(var cloud=new GraphicsPath()){
+                cloud.AddEllipse(new RectangleF(Width*.3f,-Height*.26f,Width*1.25f,Height*.8f));
+                using(var light=new PathGradientBrush(cloud)){light.CenterColor=Color.FromArgb(105,222,229,246);light.SurroundColors=new[]{Color.FromArgb(0,239,242,250)};e.Graphics.FillPath(light,cloud);}
+            }
+            using(var footerFill=new SolidBrush(Color.FromArgb(95,Color.White)))e.Graphics.FillRectangle(footerFill,0,Height-Px(41),Width,Px(41));
         }
         protected override void OnPaint(PaintEventArgs e) {
             base.OnPaint(e);e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
             using(Pen border=new Pen(Color.FromArgb(180,Color.White)))using(GraphicsPath path=QuotaAppearance.RoundRectangle(new RectangleF(.8f,.8f,Width-1.6f,Height-1.6f),Px(22)))e.Graphics.DrawPath(border,path);
             using(Pen line=new Pen(Color.FromArgb(22,preferences.AccentColor)))e.Graphics.DrawLine(line,Px(18),Height-Px(39),Width-Px(18),Height-Px(39));
         }
-        protected override void Dispose(bool disposing) { if(disposing)animation.Dispose();base.Dispose(disposing);if(disposing){regular.Dispose();small.Dispose();valueFont.Dispose();} }
+        protected override void Dispose(bool disposing) { if(disposing)animation.Dispose();base.Dispose(disposing);if(disposing){regular.Dispose();small.Dispose();valueFont.Dispose();headingFont.Dispose();} }
     }
 
     internal sealed class MetricCards : Control
@@ -627,30 +710,70 @@ namespace CodexQuota
         private readonly Font labelFont, valueFont;
         private readonly int columns;
         private string[] names = new string[0], values = new string[0], hints = new string[0];
+        private double? quotaValue;
+        private bool hasQuotaMeter, quotaStale;
         internal Color Accent = QuotaAppearance.Green;
         internal MetricCards(float factor, Font small, Font large, int count)
         {
-            scale = factor; labelFont = small; valueFont = large; columns = count; BackColor = Color.White;
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            scale = factor; labelFont = small; valueFont = large; columns = count;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;
         }
         internal void SetItems(string[] labels, string[] numbers) { SetItems(labels, numbers, new string[0]); }
         internal void SetItems(string[] labels, string[] numbers, string[] notes) { names = labels; values = numbers; hints = notes; AccessibleName = String.Join("; ", labels) + ": " + String.Join("; ", numbers) + ". " + String.Join("; ", notes); Invalidate(); }
+        internal void SetQuota(double? remaining, bool stale) { hasQuotaMeter = true; quotaValue = remaining; quotaStale = stale; Invalidate(); }
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e); e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            if (Width < 5 || Height < 8) return;
             int rows = Math.Max(1, (int)Math.Ceiling(names.Length / (double)columns));
-            float gap = 8 * scale, width = (Width - gap * (columns - 1)) / columns, height = (Height - gap * (rows - 1)) / rows;
+            RectangleF surface = new RectangleF(1.5f * scale, 1.5f * scale, Width - 3 * scale, Height - 7 * scale);
+            GlassMaterial.Surface(e.Graphics, surface, 18 * scale, QuotaAppearance.Blend(Accent, Color.FromArgb(250, 246, 251), .96f), scale, true);
+            float width = surface.Width / columns, height = surface.Height / rows;
+            using (Pen line = new Pen(Color.FromArgb(225, 221, 231), scale))
+            {
+                for (int column = 1; column < columns; column++) e.Graphics.DrawLine(line, surface.X + column * width, surface.Y, surface.X + column * width, surface.Bottom);
+                for (int row = 1; row < rows; row++) e.Graphics.DrawLine(line, surface.X, surface.Y + row * height, surface.Right, surface.Y + row * height);
+            }
             for (int i = 0; i < names.Length; i++)
             {
-                RectangleF card = new RectangleF((i % columns) * (width + gap), (i / columns) * (height + gap), width - 1, height - 1);
-                using (GraphicsPath path = QuotaAppearance.RoundRectangle(card, 14 * scale))
-                using (Brush fill = new LinearGradientBrush(card, Color.White, QuotaAppearance.Blend(Accent, Color.White, .96f), 90f))
-                using (Pen border = new Pen(Color.FromArgb(235, Color.White))) { e.Graphics.FillPath(fill, path); e.Graphics.DrawPath(border, path); }
-                Rectangle label = Rectangle.Round(new RectangleF(card.X + 11 * scale, card.Y + 9 * scale, width - 20 * scale, 18 * scale));
-                Rectangle value = Rectangle.Round(new RectangleF(card.X + 11 * scale, card.Y + 30 * scale, width - 20 * scale, 29 * scale));
+                RectangleF cell = new RectangleF(surface.X + (i % columns) * width, surface.Y + (i / columns) * height, width, height);
+                float inset = (columns > 2 ? 11 : 15) * scale;
+                Rectangle label = Rectangle.Round(new RectangleF(cell.X + inset, cell.Y + 14 * scale, width - inset * 2, 20 * scale));
+                Rectangle value = Rectangle.Round(new RectangleF(cell.X + inset, cell.Y + 37 * scale, width - inset * 2, 34 * scale));
                 TextRenderer.DrawText(e.Graphics, names[i], labelFont, label, QuotaAppearance.Muted, TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
-                TextRenderer.DrawText(e.Graphics, i < values.Length ? values[i] : "—", valueFont, value, QuotaAppearance.Text, TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
-                if(i < hints.Length) TextRenderer.DrawText(e.Graphics, hints[i], labelFont, Rectangle.Round(new RectangleF(card.X + 11 * scale, card.Bottom - 23 * scale, width - 20 * scale, 18 * scale)), QuotaAppearance.Muted, TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+                string number = i < values.Length ? values[i] : "—";
+                float fontSize = valueFont.Size;
+                while (fontSize > 18 * scale)
+                {
+                    using (Font trial = new Font(valueFont.FontFamily, fontSize, valueFont.Style, GraphicsUnit.Pixel))
+                        if (TextRenderer.MeasureText(e.Graphics, number, trial, Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width <= value.Width) break;
+                    fontSize -= scale;
+                }
+                using (Font fitted = new Font(valueFont.FontFamily, fontSize, valueFont.Style, GraphicsUnit.Pixel))
+                    TextRenderer.DrawText(e.Graphics, number, fitted, value, hasQuotaMeter && i == 1 && quotaStale ? QuotaAppearance.Muted : QuotaAppearance.Text, TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+                if (hasQuotaMeter && i == 1)
+                {
+                    float y = cell.Y + 77 * scale;
+                    using (Pen track = new Pen(Color.FromArgb(233, 227, 234), 4 * scale))
+                    {
+                        track.StartCap = track.EndCap = LineCap.Round;
+                        e.Graphics.DrawLine(track, cell.X + inset + 2 * scale, y, cell.Right - inset - 2 * scale, y);
+                    }
+                    if (quotaValue.HasValue && !Double.IsNaN(quotaValue.Value) && !Double.IsInfinity(quotaValue.Value) && quotaValue.Value > 0)
+                        using (Pen meter = new Pen(quotaStale ? Color.FromArgb(185, 179, 189) : Color.FromArgb(165, 158, 176), 4 * scale))
+                        {
+                            meter.StartCap = meter.EndCap = LineCap.Round;
+                            float left = cell.X + inset + 2 * scale, meterWidth = width - inset * 2 - 4 * scale;
+                            e.Graphics.DrawLine(meter, left, y, left + meterWidth * (float)Math.Min(100, quotaValue.Value) / 100, y);
+                        }
+                }
+                if (i < hints.Length)
+                {
+                    float top = hasQuotaMeter && i == 1 ? 88 * scale : 75 * scale;
+                    Rectangle note = Rectangle.Round(new RectangleF(cell.X + inset, cell.Y + top, width - inset * 2, Math.Max(18 * scale, height - top - 3 * scale)));
+                    TextRenderer.DrawText(e.Graphics, hints[i], labelFont, note, QuotaAppearance.Muted, TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+                }
             }
         }
     }
@@ -669,8 +792,8 @@ namespace CodexQuota
         internal QuotaSummaryView(float factor, Font normal, Font little, Font value)
         {
             scale = factor; regular = normal; small = little; large = value;
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            BackColor = Color.White; DesiredHeight = 112; tooltip.InitialDelay = 100; tooltip.AutoPopDelay = 15000;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent; DesiredHeight = 112; tooltip.InitialDelay = 100; tooltip.AutoPopDelay = 15000;
         }
         internal void SetData(QuotaState next, Color color, bool useEnglish)
         {
@@ -706,13 +829,19 @@ namespace CodexQuota
                 TextRenderer.DrawText(e.Graphics, text, small, new Rectangle(0, (int)(34 * scale), Width, (int)(55 * scale)), QuotaAppearance.Muted, TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding); return;
             }
             int columns = Math.Min(2, count);
-            float gap = 10 * scale, cardWidth = (Width - gap * (columns - 1)) / columns;
+            float cardWidth = Width / (float)columns;
+            int rows = (int)Math.Ceiling(count / (double)columns);
+            RectangleF allCards = new RectangleF(1, 29 * scale, Width - 3, rows * 94 * scale - 8 * scale);
+            GlassMaterial.Surface(e.Graphics, allCards, 15 * scale, QuotaAppearance.Blend(accent, Color.FromArgb(250, 247, 252), .97f), scale, false);
+            using (Pen separator = new Pen(Color.FromArgb(225, 221, 231), scale))
+            {
+                if (columns == 2) e.Graphics.DrawLine(separator, cardWidth, allCards.Y, cardWidth, allCards.Bottom);
+                for (int row = 1; row < rows; row++) e.Graphics.DrawLine(separator, allCards.X, allCards.Y + row * 94 * scale, allCards.Right, allCards.Y + row * 94 * scale);
+            }
             for (int i = 0; i < count; i++)
             {
                 QuotaWindow window = state.Windows[i]; if (window == null) continue;
-                RectangleF card = new RectangleF((i % columns) * (cardWidth + gap), 29 * scale + (i / columns) * 94 * scale, cardWidth, 85 * scale); areas.Add(card);
-                using (GraphicsPath path = QuotaAppearance.RoundRectangle(card, 14 * scale))
-                using (Brush fill = new LinearGradientBrush(card, Color.White, QuotaAppearance.Blend(accent, Color.White, .92f), 90f)) e.Graphics.FillPath(fill, path);
+                RectangleF card = new RectangleF((i % columns) * cardWidth, 29 * scale + (i / columns) * 94 * scale, cardWidth, 85 * scale); areas.Add(card);
                 Draw(e.Graphics, WindowName(window) + (english ? " remaining" : "剩余"), small, new RectangleF(card.X + 11 * scale, card.Y + 8 * scale, cardWidth - 22 * scale, 16 * scale), QuotaAppearance.Muted);
                 Draw(e.Graphics, QuotaAppearance.Percentage(window.Remaining), large, new RectangleF(card.X + 11 * scale, card.Y + 27 * scale, cardWidth - 22 * scale, 27 * scale), state.Stale ? QuotaAppearance.Muted : QuotaAppearance.Text);
                 float meterY = card.Y + 60 * scale;

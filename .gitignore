@@ -5,6 +5,7 @@
 .cache/
 .work/
 .impeccable/
+.shiyepages-receipt.json
 
 # Generated build and release output
 dist/

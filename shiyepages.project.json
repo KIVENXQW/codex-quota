@@ -1,0 +1,17 @@
+{
+  "format": "shiyepages-release",
+  "version": 1,
+  "projectKey": "kivenxqw-codex-quota",
+  "title": "Codex 额度面板",
+  "description": "Windows 原生额度工具；通过 GitHub 正式发布页查看源码与下载安装包。网址型收录仅记录发布入口，不是源目录或本机数据快照。",
+  "group": "桌面工具",
+  "source": {
+    "type": "url",
+    "url": "https://github.com/KIVENXQW/codex-quota/releases/tag/v2.3.0"
+  },
+  "release": {
+    "title": "2.3.0 液态玻璃主界面与可选角标",
+    "revision": "v2.3.0",
+    "notes": "正式原生主面板重绘；双行玻璃卡、玻璃胶囊、数字托盘可切换；玻璃背景透明度 10%–80% 可调，文字保持清晰。安装包已完成原生与数据测试、旧更新器兼容校验。此版本只收录正式 GitHub 发布入口，不收录演示网页和测试样例。"
+  }
+}

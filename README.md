@@ -1,8 +1,16 @@
 # Codex Quota
 
-Windows 上的 Codex 额度与用量小工具，版本 **2.2.1**。保留左下角头像上方标记和 Windows 托盘入口，点击打开原生玻璃面板。独立社区工具，与 OpenAI 无官方关联。
+Windows 上的 Codex 额度与用量小工具，版本 **2.3.0**。保留左下角头像上方标记和 Windows 托盘入口，点击打开原生玻璃面板。独立社区工具，与 OpenAI 无官方关联。
 
-2.2.1 将托盘数字改为 B「厚边折射」玻璃圆环：弧长表示剩余比例，中心显示数值；适配任务栏明暗、图标尺寸和用户配色。热力图采用差异更明显的全年统一色阶，悬停详情使用玻璃卡片，保留完整数字与覆盖说明。
+2.3.0 重绘主面板：连续的四格指标面、玻璃分段导航和更清楚的数字层级。在「外观」中可随时切换右下角双行玻璃卡、玻璃胶囊或极简数字托盘，并调节玻璃背景透明度。默认使用字更大、更粗的双行卡。
+
+双行卡和胶囊是任务栏上方的独立浮窗，可拖动、整块点击打开详情；数字托盘仍在系统通知区域。背景透明度可调为 10%–80%，文字保持清晰，设置自动保存。主面板为原生绘制的玻璃外观，右下角浮窗使用实际逐像素透明度；不捕获桌面图像。
+
+以下为真实原生控件的离屏效果，使用测试数据展示外观，不代表当前账户状态。
+
+![2.3.0 主面板](docs/images/v2.3.0-main.png)
+
+[外观设置](docs/images/v2.3.0-appearance.png) · [右下角形式及透明度对照](docs/images/v2.3.0-corner-styles.png)
 
 ## 下载与运行
 
@@ -24,7 +32,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Start-Native.ps1 -Star
 
 - **首页**：选定范围内的真实 Token 总消耗、剩余额度与本机 AI 工作时长，保留所有账户额度窗口和重置时间。
 - **历史统计**：日周月柱状图及玻璃悬停详情、更大的分段年度 Token 热力图、集中展示累计与记录。全年已知正值分成最多五档，重复边界合并，翻页使用相同阈值；零值灰色，无记录空心。色阶反映全年分布，不是按最大值线性比例。
-- **外观**：小号 Microsoft YaHei UI、玫瑰玻璃层次、圆角按钮、中英文与配色设置；页面切换尊重 Windows 动画设置。
+- **外观**：Microsoft YaHei UI、玫瑰玻璃层次、中英文与配色设置，右下角三种形式和背景透明度；页面切换尊重 Windows 动画设置。
 - **窗口跟随**：标记为 Codex 子窗口；切到旁边浏览器且头像仍可见时保留，最小化或头像被遮挡时隐藏。
 - **更新**：面板“有更新”、托盘角标和短暂玻璃提醒通向同一更新页，展示真实版本、说明、下载与校验状态。
 
@@ -38,7 +46,7 @@ Token 来自账户统计，可能延迟。工作时长和已完成回合来自�
 
 安装前校验 ZIP 和每个文件，独立助手替换并重启额度工具，失败回滚；保留本机数据、语言、颜色和来源配置，不关闭 Codex。
 
-**旧版第一次升级仍显示旧更新窗口，安装完成后才进入玻璃界面。** 旧安装目录的 `repository` 若为空，需设为 `KIVENXQW/codex-quota`。推送代码不会触发升级，需发布更高版本正式 Release。详见 [UPDATES.md](UPDATES.md)。
+**下载和安装过程使用当前已安装版本的更新页；完成后进入 2.3.0 的新主面板。** 旧安装目录的 `repository` 若为空，需设为 `KIVENXQW/codex-quota`。推送代码不会触发升级，需发布更高版本正式 Release。详见 [UPDATES.md](UPDATES.md)。
 
 ## 隐私与构建
 
@@ -50,10 +58,12 @@ Token 来自账户统计，可能延迟。工作时长和已完成回合来自�
 node --test
 ```
 
-使用 .NET Framework 的 `csc.exe`，无需 .NET SDK。版本来自 `version.json`；输出到 `dist/v2.2.1/`。新增原生源代码编译进 EXE，保留旧更新器的运行文件名单。
+使用 .NET Framework 的 `csc.exe`，无需 .NET SDK。版本来自 `version.json`；输出到 `dist/v2.3.0/`。新增原生源代码编译进 EXE，保留旧更新器的运行文件名单。
 
 ## English
 
 Codex Quota is an independent Windows companion for Codex Desktop. Extract the entire release ZIP and run CodexQuota.exe. It provides an avatar badge, tray entry, native glass Home/History panel, account quota/reset details, Token activity, local AI work time, language/accent settings, and verified updates from this public repository.
+
+Version 2.3.0 redraws the main panel and adds three corner styles under Appearance: a large two-line glass card (default), a glass capsule, and compact tray digits. Floating styles sit above the taskbar. Their background transparency is adjustable from 10% to 80% while text remains opaque; preferences persist across restarts.
 
 Local work records cover available metadata from this PC over the last 90 days. Account Tokens and local work time differ in scope; precise Tokens/hour and per-task/model breakdowns are unavailable rather than fabricated. Chat bodies are not collected. The first upgrade uses the old version's updater; subsequent updates use the integrated glass UI.
