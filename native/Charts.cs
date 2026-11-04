@@ -205,6 +205,7 @@ namespace CodexQuota
 
     internal sealed class TokenHeatmap : Control
     {
+        internal bool Compact;
         private List<ChartBucket> buckets = new List<ChartBucket>();
         private readonly List<RectangleF> cells = new List<RectangleF>();
         private readonly ChartDetailPresenter details;
@@ -249,9 +250,11 @@ namespace CodexQuota
             int offset = ((int)buckets[0].Start.DayOfWeek + 6) % 7;
             int columns = (int)Math.Ceiling((buckets.Count + offset) / 7d);
             float pitch = Math.Min(26 * scale, (Width - 1) / (float)Math.Max(1, columns));
+            if(Compact)pitch=Math.Min(pitch,Math.Max(4*scale,(Height-66*scale)/7f));
             float gap = Math.Max(1, Math.Min(3 * scale,pitch * .12f));
             float size = Math.Max(2, pitch - gap);
             float top = 19 * scale;
+            float origin=Compact?Math.Max(0,(Width-columns*pitch)/2):0;
             int previousMonth = -1;
             for (int i = 0; i < buckets.Count; i++)
             {
@@ -259,7 +262,7 @@ namespace CodexQuota
                 int position = i + offset;
                 int column = position / 7;
                 int row = position % 7;
-                float x = column * pitch;
+                float x = origin + column * pitch;
                 if (bucket.Start.Month != previousMonth && (i == 0 || bucket.Start.Day == 1))
                 {
                     if (column < columns - 2)
@@ -281,7 +284,7 @@ namespace CodexQuota
                 }
             }
             float legendY = top + 7 * pitch + 9 * scale;
-            float xLegend=0;
+            float xLegend=origin;
             if(colors.BandCount>0) {
                 xLegend=LegendText(g,english?"Less":"少",xLegend,legendY)+5*scale;
                 for(int level=1;level<=colors.BandCount;level++){LegendCell(g,colors.ColorForBand(level,accent),xLegend,legendY,false);xLegend+=15*scale;}
@@ -291,7 +294,7 @@ namespace CodexQuota
             xLegend=LegendText(g,"0",xLegend,legendY)+14*scale;
             LegendCell(g,colors.ColorFor(null,accent),xLegend,legendY,true);xLegend+=15*scale;
             LegendText(g,english?"No record":"无记录",xLegend,legendY);
-            LegendText(g,english?"Colors use the same annual distribution":"色阶按全年分布统一分档",0,legendY+20*scale);
+            LegendText(g,english?"Colors use the same annual distribution":"色阶按全年分布统一分档",Compact?Math.Min(origin,Math.Max(0,Width-250*scale)):0,legendY+20*scale);
         }
         private float LegendText(Graphics g,string text,float x,float y) {
             using(var brush=new SolidBrush(QuotaAppearance.Muted))g.DrawString(text,small,brush,x,y-2*scale);
@@ -304,12 +307,11 @@ namespace CodexQuota
             }
         }
 
+        internal int BucketAt(Point location) {for(int i=0;i<cells.Count&&i<buckets.Count;i++)if(cells[i].Contains(location))return i;return -1;}
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
-            int next = -1;
-            for (int i = 0; i < cells.Count; i++) if (cells[i].Contains(e.Location)) { next = i; break; }
-            if (next >= buckets.Count) next = -1;
+            int next = BucketAt(e.Location);
             if (next != hovered || (next >= 0 && !details.Visible))
             {
                 hovered = next;

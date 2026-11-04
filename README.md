@@ -1,20 +1,19 @@
 # Codex Quota
 
-Windows 上的 Codex 额度与用量小工具，版本 **2.3.1**。保留左下角头像上方标记和 Windows 托盘入口，点击打开原生玻璃面板。独立社区工具，与 OpenAI 无官方关联。
+Windows 上的 Codex 额度与用量小工具，版本 **2.4.0**。独立社区工具，与 OpenAI 无官方关联。
 
-2.3.1 修复实际窗口中日期、导航分段按钮文字重叠和选中背景残留的问题。头像上方入口改为同套玻璃材质与更大的粗体数字；Windows 托盘在所有显示模式下均使用清晰的粗体数字，避免卡片模式仍显示旧圆环。
+默认采用极简主面板：细线文字导航、三行核心指标和较少的装饰。`外观 → 面板主题` 可切回玻璃主题，语言、配色、右下角显示形式和透明度会保存。
 
-[新版头像入口的原生绘制示例](docs/images/v2.3.1-badges.png) · [修正后的日期按钮](docs/images/v2.3.1-periods.png)
+- 头像上方采用 **B 圆形玻璃环**，中心是紧凑数字，保留原附着位置。
+- Windows 托盘使用数字入口；任务栏上方可选择双行玻璃卡或胶囊。角落背景透明度为 10%–80%，文字保持清晰。
+- 单纯移动鼠标或失焦不再关闭面板；有意点击外部、关闭按钮或 Esc 仍可关闭。
+- 开窗和切页只保留最多 2 px、约 120 ms 的轻微内容过渡，窗口本身固定且不整体闪淡。
 
-2.3.0 重绘主面板：连续的四格指标面、玻璃分段导航和更清楚的数字层级。在「外观」中可随时切换右下角双行玻璃卡、玻璃胶囊或极简数字托盘，并调节玻璃背景透明度。默认使用字更大、更粗的双行卡。
+以下为实际原生控件的离屏效果，使用测试数据展示外观，不代表当前账户状态。
 
-双行卡和胶囊是任务栏上方的独立浮窗，可拖动、整块点击打开详情；数字托盘仍在系统通知区域。背景透明度可调为 10%–80%，文字保持清晰，设置自动保存。主面板为原生绘制的玻璃外观，右下角浮窗使用实际逐像素透明度；不捕获桌面图像。
+![2.4.0 极简主面板](docs/images/v2.4.0-minimal-home.png)
 
-以下为真实原生控件的离屏效果，使用测试数据展示外观，不代表当前账户状态。
-
-![2.3.0 主面板](docs/images/v2.3.0-main.png)
-
-[外观设置](docs/images/v2.3.0-appearance.png) · [右下角形式及透明度对照](docs/images/v2.3.0-corner-styles.png)
+[历史统计](docs/images/v2.4.0-minimal-history.png) · [外观设置](docs/images/v2.4.0-appearance.png) · [圆形玻璃头像](docs/images/v2.4.0-avatar.png)
 
 ## 下载与运行
 
@@ -50,7 +49,7 @@ Token 来自账户统计，可能延迟。工作时长和已完成回合来自�
 
 安装前校验 ZIP 和每个文件，独立助手替换并重启额度工具，失败回滚；保留本机数据、语言、颜色和来源配置，不关闭 Codex。
 
-**下载和安装过程使用当前已安装版本的更新页；完成后进入 2.3.1 的新主面板。** 旧安装目录的 `repository` 若为空，需设为 `KIVENXQW/codex-quota`。推送代码不会触发升级，需发布更高版本正式 Release。详见 [UPDATES.md](UPDATES.md)。
+**下载和安装过程使用当前已安装版本的更新页；完成后进入 2.4.0 的极简主面板。** 旧安装目录的 `repository` 若为空，需设为 `KIVENXQW/codex-quota`。推送代码不会触发升级，需发布更高版本正式 Release。详见 [UPDATES.md](UPDATES.md)。
 
 ## 隐私与构建
 
@@ -62,14 +61,12 @@ Token 来自账户统计，可能延迟。工作时长和已完成回合来自�
 node --test
 ```
 
-使用 .NET Framework 的 `csc.exe`，无需 .NET SDK。版本来自 `version.json`；输出到 `dist/v2.3.1/`。新增原生源代码编译进 EXE，保留旧更新器的运行文件名单。
+使用 .NET Framework 的 `csc.exe`，无需 .NET SDK。版本来自 `version.json`；输出到 `dist/v2.4.0/`。新增原生源代码编译进 EXE，保留旧更新器的运行文件名单。
 
 ## English
 
-Codex Quota is an independent Windows companion for Codex Desktop. Extract the entire release ZIP and run CodexQuota.exe. It provides an avatar badge, tray entry, native glass Home/History panel, account quota/reset details, Token activity, local AI work time, language/accent settings, and verified updates from this public repository.
+Codex Quota is an independent Windows companion for Codex Desktop. Extract the entire release ZIP and run CodexQuota.exe. Version 2.4.0 defaults to a minimal Home/History panel; the glass theme remains selectable in Appearance. The avatar entry uses a circular glass ring. The tray remains a numeric entry, with optional floating card/capsule and adjustable background transparency.
 
-Version 2.3.0 redraws the main panel and adds three corner styles under Appearance: a large two-line glass card (default), a glass capsule, and compact tray digits. Floating styles sit above the taskbar. Their background transparency is adjustable from 10% to 80% while text remains opaque; preferences persist across restarts.
+Mouse movement or focus loss alone no longer dismisses the panel. Outside clicks, close and Escape remain available. Transitions use at most 2 logical pixels over 120 ms without moving or fading the entire window.
 
-Version 2.3.1 fixes native repaint ghosting in the segmented buttons, enlarges the avatar badge digits with the same glass material, and uses bold tray digits in every corner mode. The avatar attachment and floating-card controls remain available.
-
-Local work records cover available metadata from this PC over the last 90 days. Account Tokens and local work time differ in scope; precise Tokens/hour and per-task/model breakdowns are unavailable rather than fabricated. Chat bodies are not collected. The first upgrade uses the old version's updater; subsequent updates use the integrated glass UI.
+Local work records cover available metadata from this PC over the last 90 days. Account Tokens and local work time differ in scope; unavailable per-hour and per-task/model breakdowns are not fabricated. Chat bodies are not collected. Updating preserves local data and preferences and restarts only the companion.

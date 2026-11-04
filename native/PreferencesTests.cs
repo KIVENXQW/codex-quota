@@ -11,10 +11,19 @@ class PreferencesTests {
   static int Main(){try{Run();Console.WriteLine("Preferences: "+checks+" checks PASS");return 0;}catch(Exception e){Console.Error.WriteLine("FAIL: "+e.Message);return 1;}}
   static void Run(){
     var defaults=new UserPreferences();
+    Check((string)Get(defaults,"PanelStyle")=="minimal","New and migrated profiles default to the approved minimal theme");
     Check((string)Get(defaults,"CornerStyle")=="card","New installations default to double-row card");
     Check((int)Get(defaults,"GlassTransparency")==45,"Default glass background transparency is 45 percent");
     var old=Read("{\"language\":\"en\",\"accent\":\"#477ABB\"}");
     Check(old.Language=="en"&&old.AccentHtml=="#477ABB","Old preferences retain language and accent");
+    Check((string)Get(old,"PanelStyle")=="minimal","Old JSON gains the minimal theme without losing other settings");
+    foreach(string theme in new[]{"minimal","glass"}) {
+      var themed=Read("{\"panelStyle\":\""+theme+"\",\"cornerStyle\":\"capsule\",\"glassTransparency\":52}");
+      var restored=Read(Write(themed));
+      Check((string)Get(restored,"PanelStyle")==theme,"Panel theme survives restart: "+theme);
+      Check((string)Get(restored,"CornerStyle")=="capsule"&&(int)Get(restored,"GlassTransparency")==52,"Theme persistence retains corner preferences");
+    }
+    Check((string)Get(Read("{\"panelStyle\":\"invalid\"}"),"PanelStyle")=="minimal","Unknown panel themes use minimal");
     Check((string)Get(old,"CornerStyle")=="card"&&(int)Get(old,"GlassTransparency")==45,"Old JSON gains corner defaults");
     foreach(string style in new[]{"card","capsule","tray"}) {
       var next=Read("{\"language\":\"en\",\"accent\":\"#AA3366\",\"cornerStyle\":\""+style+"\",\"glassTransparency\":72}");

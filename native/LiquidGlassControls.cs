@@ -54,6 +54,8 @@ namespace CodexQuota
         private RectangleF lens, from, target;
         private bool arranging;
         internal Color Accent = QuotaAppearance.Green;
+        private bool minimal;
+        internal bool Minimal { get { return minimal; } set { if(minimal==value)return;minimal=value;motion.Stop();PerformLayout();Invalidate(true); } }
 
         internal GlassSegmentRail(float factor, string name, params RoundedButton[] buttons)
         {
@@ -85,7 +87,7 @@ namespace CodexQuota
             if (selected == button && target == (RectangleF)button.Bounds) return;
             selected = button; from = lens; target = button.Bounds;
             Form owner = FindForm();
-            if (lens.Width <= 0 || owner == null || !owner.Visible || !SystemInformation.IsMenuAnimationEnabled)
+            if (Minimal || lens.Width <= 0 || owner == null || !owner.Visible || !SystemInformation.IsMenuAnimationEnabled)
             {
                 motion.Stop(); lens = target;
             }
@@ -105,12 +107,14 @@ namespace CodexQuota
             base.OnLayout(e);
             if (arranging || Controls.Count == 0) return;
             arranging = true;
-            int inset = Math.Max(2, (int)Math.Round(3 * scale));
+            int inset = Minimal ? 0 : Math.Max(2, (int)Math.Round(3 * scale));
             int available = Math.Max(0, Width - inset * 2);
+            int compactLeft = 0;
             for (int i = 0; i < Controls.Count; i++)
             {
                 int left = inset + (int)Math.Round(available * i / (double)Controls.Count);
                 int right = inset + (int)Math.Round(available * (i + 1) / (double)Controls.Count);
+                if(Minimal && Name=="mainNavigation") {left=compactLeft;right=left+(int)Math.Round((i==0?48:76)*scale);compactLeft=right+(int)Math.Round(8*scale);}
                 Controls[i].SetBounds(left, inset, Math.Max(0, right - left), Math.Max(0, Height - inset * 2));
             }
             if (selected != null)
@@ -126,6 +130,14 @@ namespace CodexQuota
             base.OnPaint(e);
             if (Width < 4 || Height < 4) return;
             Graphics graphics = e.Graphics; graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            if(Minimal) {
+                if(Name=="mainNavigation")using(var line=new Pen(MinimalMaterial.Line,scale))graphics.DrawLine(line,0,Height-scale,Width,Height-scale);
+                if(selected!=null) {
+                    float left=selected.Left+4*scale,width=Math.Min(selected.Width-8*scale,TextRenderer.MeasureText(selected.Text,selected.Font,Size.Empty,TextFormatFlags.NoPadding).Width);
+                    if(Name=="mainNavigation")using(var line=new Pen(QuotaAppearance.Darken(Accent,.12f),2*scale))graphics.DrawLine(line,left,Height-scale,left+width,Height-scale);
+                }
+                return;
+            }
             RectangleF track = new RectangleF(.5f * scale, .5f * scale, Width - scale, Height - scale);
             float radius = Math.Min(19 * scale, Height * .43f);
             Color upper = QuotaAppearance.Blend(Accent, Color.FromArgb(220, 220, 232), .9f);
