@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
@@ -13,7 +14,8 @@ namespace CodexQuota
         private readonly HueSurface hue;
         private readonly TextBox hex;
         private readonly Button apply;
-        private readonly ToolTip tooltip = new ToolTip();
+        private readonly List<DwellTextTip> swatchHints = new List<DwellTextTip>();
+        private readonly ToolTip validationTip = new ToolTip();
         private readonly float scale;
         private Color selected;
         private bool updating;
@@ -34,13 +36,15 @@ namespace CodexQuota
                 swatch.Tag = presets[i];
                 swatch.SetBounds(Px(i * 48), Px(2), Px(34), Px(34));
                 swatch.AccessibleName = ColorTranslator.ToHtml(presets[i]);
-                tooltip.SetToolTip(swatch, ColorTranslator.ToHtml(presets[i]));
                 swatch.Click += delegate(object sender, EventArgs e)
                 {
                     SetColor((Color)((Control)sender).Tag);
                     Commit();
                 };
                 Controls.Add(swatch);
+                swatchHints.Add(new DwellTextTip(swatch, scale,
+                    point => swatch.ClientRectangle.Contains(point) ? 0 : -1,
+                    index => swatch.AccessibleName));
             }
             saturation = new SaturationSurface();
             saturation.SetBounds(0, Px(58), Px(330), Px(146));
@@ -128,7 +132,7 @@ namespace CodexQuota
             if (text.Length != 6 || !Int32.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value))
             {
                 hex.ForeColor = Color.FromArgb(174, 60, 74);
-                tooltip.Show(english ? "Enter six hex digits, for example #DA91AA" : "请输入六位颜色值，例如 #DA91AA", hex, 0, hex.Height + 3, 3500);
+                validationTip.Show(english ? "Enter six hex digits, for example #DA91AA" : "请输入六位颜色值，例如 #DA91AA", hex, 0, hex.Height + 3, 3500);
                 return;
             }
             SetColor(Color.FromArgb((value >> 16) & 255, (value >> 8) & 255, value & 255));
@@ -158,7 +162,13 @@ namespace CodexQuota
                 e.Graphics.FillPath(brush, path);
         }
 
-        protected override void Dispose(bool disposing) { if (disposing) tooltip.Dispose(); base.Dispose(disposing); }
+        protected override void Dispose(bool disposing) {
+            if (disposing) {
+                foreach (DwellTextTip hint in swatchHints) hint.Dispose();
+                validationTip.Dispose();
+            }
+            base.Dispose(disposing);
+        }
 
         private sealed class Swatch : Button
         {

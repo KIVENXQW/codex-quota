@@ -34,18 +34,6 @@ namespace CodexQuota
             return english ? remain + "s" : remain + "秒";
         }
 
-        internal static string BucketTooltip(ChartBucket bucket, bool english)
-        {
-            string dates = bucket.Start.ToString("yyyy-MM-dd") + (bucket.End.Date > bucket.Start.Date ? " – " + bucket.End.ToString("yyyy-MM-dd") : "");
-            string text = dates + "\nTokens  " + Number(bucket.Tokens, false) + "\n" +
-                (english ? "AI work time  " : "AI 工作时长  ") + Duration(bucket.WorkSeconds, english, true) + "\n" +
-                (english ? "Completed tasks  " : "完成任务  ") + (bucket.Tasks.HasValue ? bucket.Tasks.Value.ToString("N0") : "—");
-            if (bucket.TokenPartial) text += english ? "\nToken coverage: partial" : "\nToken 记录：部分覆盖";
-            if (bucket.WorkPartial) text += english ? "\nLocal activity coverage: partial" : "\n本机工作记录：部分覆盖";
-            if (!bucket.Tokens.HasValue) text += english ? "\nNo Token record" : "\n暂无 Token 记录";
-            if (!bucket.WorkSeconds.HasValue) text += english ? "\nNo local activity record" : "\n暂无本机工作记录";
-            return text;
-        }
     }
 
     internal sealed class UsageBarChart : Control
@@ -57,7 +45,6 @@ namespace CodexQuota
         private Color accent = Color.FromArgb(218, 145, 170);
         private bool english;
         private bool timeMetric;
-        private int hovered = -1;
         private readonly float scale;
 
         internal UsageBarChart(float factor)
@@ -67,7 +54,7 @@ namespace CodexQuota
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
             BackColor = Color.White;
             AccessibleRole = AccessibleRole.Chart;
-            details = new ChartDetailPresenter(this,scale);
+            details = new ChartDetailPresenter(this, scale, BucketAt, ShowDetails);
             TabStop = true;
         }
 
@@ -79,8 +66,7 @@ namespace CodexQuota
             accent = color;
             english = useEnglish;
             AccessibleName = english ? "Usage chart. Arrow keys select a period." : "用量柱状图，方向键可选择日期查看明细";
-            hovered = -1;
-            details.Hide();
+            details.Hover.Cancel();
             Invalidate();
         }
 
@@ -126,7 +112,7 @@ namespace CodexQuota
                 {
                     float height = Math.Max(3 * scale, (float)(value.Value / maximum * chartHeight));
                     RectangleF bar = new RectangleF(x, top + chartHeight - height, barWidth, height);
-                    Color fillColor = index == hovered ? QuotaAppearance.Darken(accent, .16f) : accent;
+                    Color fillColor = index == details.Selected ? QuotaAppearance.Darken(accent, .16f) : accent;
                     bool partial = timeMetric ? item.WorkPartial : item.TokenPartial;
                     using (GraphicsPath path = QuotaAppearance.RoundRectangle(bar, Math.Min(4 * scale, barWidth / 3)))
                     using (Brush brush = new SolidBrush(partial ? QuotaAppearance.Blend(fillColor, Color.White, .25f) : fillColor))
@@ -168,35 +154,32 @@ namespace CodexQuota
             }
         }
 
+        private int BucketAt(Point point)
+        {
+            for (int i = 0; i < hitAreas.Count && i < buckets.Count; i++)
+                if (hitAreas[i].Contains(point)) return i;
+            return -1;
+        }
+
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
-            int next = -1;
-            for (int i = 0; i < hitAreas.Count; i++) if (hitAreas[i].Contains(e.Location)) { next = i; break; }
-            if (next >= buckets.Count) next = -1;
-            if (next != hovered || (next >= 0 && !details.Visible))
-            {
-                hovered = next;
-                ShowDetails();
-                Invalidate();
-            }
+            details.Hover.Move(e.Location);
         }
 
-        private void ShowDetails() {
-            if(hovered<0||hovered>=buckets.Count||hovered>=hitAreas.Count){details.Hide();return;}
-            AccessibleDescription=UsageText.BucketTooltip(buckets[hovered],english);
-            details.Show(buckets[hovered],Rectangle.Round(hitAreas[hovered]),accent,english);
+        private void ShowDetails(int index)
+        {
+            if (index < hitAreas.Count && index < buckets.Count)
+                details.Show(index, buckets[index], Rectangle.Round(hitAreas[index]), accent, english);
         }
-        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hovered = -1; details.Hide(); Invalidate(); }
+
         protected override bool IsInputKey(Keys keyData) { return keyData == Keys.Left || keyData == Keys.Right || base.IsInputKey(keyData); }
         protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
             if ((e.KeyCode == Keys.Left || e.KeyCode == Keys.Right) && buckets.Count > 0)
             {
-                hovered = Math.Max(0, Math.Min(buckets.Count - 1, hovered + (e.KeyCode == Keys.Right ? 1 : -1)));
-                ShowDetails();
-                Invalidate();
+                details.Hover.Select(Math.Max(0, Math.Min(buckets.Count - 1, details.Selected + (e.KeyCode == Keys.Right ? 1 : -1))));
                 e.Handled = true;
             }
         }
@@ -213,7 +196,6 @@ namespace CodexQuota
         private readonly float scale;
         private Color accent = Color.FromArgb(218, 145, 170);
         private bool english;
-        private int hovered = -1;
         private HeatmapScale colors = HeatmapScale.Create(new List<ChartBucket>());
 
         internal TokenHeatmap(float factor)
@@ -222,7 +204,7 @@ namespace CodexQuota
             small = new Font("Microsoft YaHei UI", 11 * scale, FontStyle.Regular, GraphicsUnit.Pixel);
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
             BackColor = Color.White;
-            details = new ChartDetailPresenter(this,scale);
+            details = new ChartDetailPresenter(this, scale, BucketAt, ShowDetails);
             AccessibleRole = AccessibleRole.Chart;
             TabStop = true;
         }
@@ -234,8 +216,7 @@ namespace CodexQuota
             accent = color;
             english = useEnglish;
             colors = annualScale ?? HeatmapScale.Create(buckets);
-            hovered = -1;
-            details.Hide();
+            details.Hover.Cancel();
             AccessibleName = english ? "Daily Token heatmap, previous 365 days" : "最近 365 天 Token 用量热力图";
             Invalidate();
         }
@@ -279,8 +260,8 @@ namespace CodexQuota
                 using (GraphicsPath path = QuotaAppearance.RoundRectangle(cell, Math.Min(3f * scale, size / 3)))
                 {
                     g.FillPath(brush, path);
-                    if (colors.Level(bucket.Tokens)<0 || hovered == i)
-                        using (Pen pen = new Pen(hovered == i ? QuotaAppearance.Darken(accent, .3f) : Color.FromArgb(232, 234, 237), Math.Max(1, scale))) g.DrawPath(pen, path);
+                    if (colors.Level(bucket.Tokens)<0 || details.Selected == i)
+                        using (Pen pen = new Pen(details.Selected == i ? QuotaAppearance.Darken(accent, .3f) : Color.FromArgb(232, 234, 237), Math.Max(1, scale))) g.DrawPath(pen, path);
                 }
             }
             float legendY = top + 7 * pitch + 9 * scale;
@@ -311,29 +292,23 @@ namespace CodexQuota
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
-            int next = BucketAt(e.Location);
-            if (next != hovered || (next >= 0 && !details.Visible))
-            {
-                hovered = next;
-                ShowDetails();
-                Invalidate();
-            }
+            details.Hover.Move(e.Location);
         }
-        private void ShowDetails() {
-            if(hovered<0||hovered>=buckets.Count||hovered>=cells.Count){details.Hide();return;}
-            AccessibleDescription=UsageText.BucketTooltip(buckets[hovered],english);
-            details.Show(buckets[hovered],Rectangle.Round(cells[hovered]),accent,english);
+
+        private void ShowDetails(int index)
+        {
+            if (index < cells.Count && index < buckets.Count)
+                details.Show(index, buckets[index], Rectangle.Round(cells[index]), accent, english);
         }
-        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hovered = -1; details.Hide(); Invalidate(); }
+
         protected override bool IsInputKey(Keys keyData) { return keyData == Keys.Left || keyData == Keys.Right || base.IsInputKey(keyData); }
         protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
             if ((e.KeyCode == Keys.Left || e.KeyCode == Keys.Right) && buckets.Count > 0)
             {
-                hovered = hovered < 0 ? buckets.Count - 1 : Math.Max(0, Math.Min(buckets.Count - 1, hovered + (e.KeyCode == Keys.Right ? 1 : -1)));
-                ShowDetails();
-                Invalidate();
+                int current = details.Selected;
+                details.Hover.Select(current < 0 ? buckets.Count - 1 : Math.Max(0, Math.Min(buckets.Count - 1, current + (e.KeyCode == Keys.Right ? 1 : -1))));
                 e.Handled = true;
             }
         }

@@ -69,7 +69,7 @@ namespace CodexQuota {
       popup.PreferencesChanged+=delegate {
         preferences=popup.Preferences;
         try{preferences.Save();}catch{MessageBox.Show(T("偏好未能保存，下次打开将使用上次设置。","Could not save preferences; previous settings will be used next time."),"Codex");}
-        ApplyPreferences();Render();
+        ApplyPreferences();RenderTray();SaveStatus(true);
       };
       popup.ApplyPreferences(preferences);ApplyPreferences();
       updater=new UpdateController(root,preferences,tray,delegate{ExitThread();},popup.UpdateView);

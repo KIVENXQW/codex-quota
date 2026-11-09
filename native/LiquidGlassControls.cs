@@ -38,24 +38,34 @@ namespace CodexQuota
 
     internal sealed class GlassPagePanel : Panel
     {
+        internal const int VerticalWheelMessage = 0x020A;
+
         internal GlassPagePanel()
         {
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
             BackColor = Color.Transparent;
+        }
+
+        internal bool ForwardWheel(ref Message message)
+        {
+            if (!Visible || !IsHandleCreated || !VerticalScroll.Visible) return false;
+            // Keep WinForms' scroll distance, high-resolution delta and MouseWheel event.
+            Message wheel = Message.Create(Handle, message.Msg, message.WParam, message.LParam);
+            WndProc(ref wheel);
+            message.Result = wheel.Result;
+            return true;
         }
     }
 
     internal sealed class GlassSegmentRail : Panel
     {
         private readonly float scale;
-        private readonly Timer motion = new Timer();
-        private readonly Stopwatch clock = new Stopwatch();
         private RoundedButton selected;
-        private RectangleF lens, from, target;
+        private RectangleF lens;
         private bool arranging;
         internal Color Accent = QuotaAppearance.Green;
         private bool minimal;
-        internal bool Minimal { get { return minimal; } set { if(minimal==value)return;minimal=value;motion.Stop();PerformLayout();Invalidate(true); } }
+        internal bool Minimal { get { return minimal; } set { if(minimal==value)return;minimal=value;PerformLayout();Invalidate(true); } }
 
         internal GlassSegmentRail(float factor, string name, params RoundedButton[] buttons)
         {
@@ -70,28 +80,12 @@ namespace CodexQuota
                 button.AccessibleRole = AccessibleRole.RadioButton;
                 if (button.Selected) selected = button;
             }
-            motion.Interval = 15;
-            motion.Tick += delegate
-            {
-                double progress = Math.Min(1, clock.Elapsed.TotalMilliseconds / 240);
-                float eased = (float)(1 - Math.Pow(1 - progress, 4));
-                lens = new RectangleF(from.X + (target.X - from.X) * eased, target.Y,
-                    from.Width + (target.Width - from.Width) * eased, target.Height);
-                if (progress >= 1) { lens = target; motion.Stop(); clock.Reset(); }
-                Invalidate(true);
-            };
         }
 
         internal void SelectButton(RoundedButton button)
         {
-            if (selected == button && target == (RectangleF)button.Bounds) return;
-            selected = button; from = lens; target = button.Bounds;
-            Form owner = FindForm();
-            if (Minimal || lens.Width <= 0 || owner == null || !owner.Visible || !SystemInformation.IsMenuAnimationEnabled)
-            {
-                motion.Stop(); lens = target;
-            }
-            else { clock.Restart(); motion.Start(); }
+            if (selected == button && lens == (RectangleF)button.Bounds) return;
+            selected = button; lens = button.Bounds;
             Invalidate(true);
         }
 
@@ -120,7 +114,7 @@ namespace CodexQuota
             if (selected != null)
             {
                 RectangleF next = selected.Bounds;
-                if (next != target) { motion.Stop(); lens = target = next; }
+                if (next != lens) lens = next;
             }
             arranging = false; Invalidate(true);
         }
@@ -164,7 +158,6 @@ namespace CodexQuota
                 }
             }
         }
-        protected override void Dispose(bool disposing) { if (disposing) motion.Dispose(); base.Dispose(disposing); }
     }
 
     internal sealed class GlassTransparencySlider : Control

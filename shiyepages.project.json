@@ -7,12 +7,12 @@
   "group": "桌面工具",
   "source": {
     "type": "url",
-    "url": "https://github.com/KIVENXQW/codex-quota/releases/tag/v2.4.0"
+    "url": "https://github.com/KIVENXQW/codex-quota/releases/tag/v2.4.1"
   },
   "release": {
-    "title": "2.4.0 极简与玻璃主题、圆形头像与平稳交互",
-    "revision": "v2.4.0",
-    "notes": "默认极简主面板，保留玻璃主题可切换；头像改为B圆形玻璃环；修复单纯鼠标移动或失焦关闭，保留外部点击关闭；开窗和切页改为2px/120ms轻微过渡，不再整窗晃动或闪淡。本条只收录正式发布网址，不冻结源目录或本机数据。"
+    "title": "2.4.1 一秒悬停详情与滚轮修复",
+    "revision": "v2.4.1",
+    "notes": "停稳一秒显示当前数据项的简约详情，滚动后重新计时。修复滚轮在导航和详情卡处中断，以及切换显示样式和首页时间范围时按钮跳动的问题。此条目记录 GitHub 正式发布入口。"
   },
   "websiteId": "8071be26-b1cd-4db4-809c-f88b28787965"
 }

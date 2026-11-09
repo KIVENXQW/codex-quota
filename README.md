@@ -1,13 +1,15 @@
 # Codex Quota
 
-Windows 上的 Codex 额度与用量小工具，版本 **2.4.0**。独立社区工具，与 OpenAI 无官方关联。
+Windows 上的 Codex 额度与用量小工具，版本 **2.4.1**。独立社区工具，与 OpenAI 无官方关联。
 
 默认采用极简主面板：细线文字导航、三行核心指标和较少的装饰。`外观 → 面板主题` 可切回玻璃主题，语言、配色、右下角显示形式和透明度会保存。
 
 - 头像上方采用 **B 圆形玻璃环**，中心是紧凑数字，保留原附着位置。
 - Windows 托盘使用数字入口；任务栏上方可选择双行玻璃卡或胶囊。角落背景透明度为 10%–80%，文字保持清晰。
 - 单纯移动鼠标或失焦不再关闭面板；有意点击外部、关闭按钮或 Esc 仍可关闭。
-- 开窗和切页只保留最多 2 px、约 120 ms 的轻微内容过渡，窗口本身固定且不整体闪淡。
+- 切换页面、时间范围和桌面额度样式时，选中状态原地更新，窗口和滚动位置保持稳定。
+
+鼠标停稳一秒后显示当前数据项的详情。滚动会收起详情，停下后按指针的新位置重新计时。[详情卡实图](docs/images/v2.4.1-detail.png)
 
 以下为实际原生控件的离屏效果，使用测试数据展示外观，不代表当前账户状态。
 
@@ -49,7 +51,7 @@ Token 来自账户统计，可能延迟。工作时长和已完成回合来自�
 
 安装前校验 ZIP 和每个文件，独立助手替换并重启额度工具，失败回滚；保留本机数据、语言、颜色和来源配置，不关闭 Codex。
 
-**下载和安装过程使用当前已安装版本的更新页；完成后进入 2.4.0 的极简主面板。** 旧安装目录的 `repository` 若为空，需设为 `KIVENXQW/codex-quota`。推送代码不会触发升级，需发布更高版本正式 Release。详见 [UPDATES.md](UPDATES.md)。
+**下载和安装过程使用当前已安装版本的更新页；完成后进入 2.4.1 的极简主面板。** 旧安装目录的 `repository` 若为空，需设为 `KIVENXQW/codex-quota`。推送代码不会触发升级，需发布更高版本正式 Release。详见 [UPDATES.md](UPDATES.md)。
 
 ## 隐私与构建
 
@@ -61,12 +63,12 @@ Token 来自账户统计，可能延迟。工作时长和已完成回合来自�
 node --test
 ```
 
-使用 .NET Framework 的 `csc.exe`，无需 .NET SDK。版本来自 `version.json`；输出到 `dist/v2.4.0/`。新增原生源代码编译进 EXE，保留旧更新器的运行文件名单。
+使用 .NET Framework 的 `csc.exe`，无需 .NET SDK。版本来自 `version.json`；输出到 `dist/v2.4.1/`。新增原生源代码编译进 EXE，保留旧更新器的运行文件名单。
 
 ## English
 
 Codex Quota is an independent Windows companion for Codex Desktop. Extract the entire release ZIP and run CodexQuota.exe. Version 2.4.0 defaults to a minimal Home/History panel; the glass theme remains selectable in Appearance. The avatar entry uses a circular glass ring. The tray remains a numeric entry, with optional floating card/capsule and adjustable background transparency.
 
-Mouse movement or focus loss alone no longer dismisses the panel. Outside clicks, close and Escape remain available. Transitions use at most 2 logical pixels over 120 ms without moving or fading the entire window.
+Mouse movement or focus loss alone no longer dismisses the panel. Outside clicks, close and Escape remain available. Selections update in place. Holding the pointer still for one second opens a compact detail. Moving or scrolling dismisses it, and the page continues to receive the wheel input.
 
 Local work records cover available metadata from this PC over the last 90 days. Account Tokens and local work time differ in scope; unavailable per-hour and per-task/model breakdowns are not fabricated. Chat bodies are not collected. Updating preserves local data and preferences and restarts only the companion.

@@ -21,9 +21,12 @@ namespace CodexQuota {
 
   // The same account and local-activity data, presented without unsupported rate tiles.
   internal sealed class MinimalOverview : Control {
+    const int PrimaryHeight = 118, SecondaryHeight = 56, CreditHeight = 26, MetricHeight = 107;
     readonly float scale;
     readonly Font normal,small,valueFont,workFont,secondaryFont;
-    readonly ToolTip tooltip=new ToolTip();
+    readonly DwellTextTip tooltip;
+    long? exactTokens;
+    double? exactWorkSeconds;
     QuotaState state;
     List<QuotaWindow> secondary=new List<QuotaWindow>();
     string tokenValue="—",workValue="—",taskValue="—",tokenHint="",workHint="",scopeHint="";
@@ -35,20 +38,48 @@ namespace CodexQuota {
       valueFont=new Font("Segoe UI",26*scale,FontStyle.Regular,GraphicsUnit.Pixel);workFont=new Font("Microsoft YaHei UI",24*scale,FontStyle.Regular,GraphicsUnit.Pixel);secondaryFont=new Font("Microsoft YaHei UI",19*scale,FontStyle.Regular,GraphicsUnit.Pixel);
       SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw|ControlStyles.SupportsTransparentBackColor,true);BackColor=Color.Transparent;
       DesiredHeight=444;
+      tooltip=new DwellTextTip(this,scale,HintAt,DescribeHint);
     }
     string L(string zh,string en){return english?en:zh;}
     internal void SetData(QuotaState next,long? tokens,double? work,int? turns,string tokenScope,string workScope,string periodScope,bool workPartial,UserPreferences prefs) {
+      tooltip.Cancel();
+      exactTokens=tokens;exactWorkSeconds=work;
       state=next;english=prefs.Language=="en";accent=QuotaAppearance.Darken(prefs.AccentColor,.12f);partial=workPartial;
       tokenValue=UsageText.Number(tokens,true);workValue=UsageText.Duration(work,english,false);if(!english)workValue=workValue.Replace("时","小时");taskValue=turns.HasValue?turns.Value.ToString("N0",CultureInfo.InvariantCulture):"—";
       tokenHint=tokenScope;workHint=workScope;scopeHint=periodScope;
       secondary.Clear();QuotaWindow primary=state==null?null:state.Primary;
       if(state!=null&&state.Windows!=null)foreach(var window in state.Windows)if(window!=null&&!Object.ReferenceEquals(window,primary))secondary.Add(window);
-      DesiredHeight=444+secondary.Count*56+(HasCredits?26:0);
+      DesiredHeight=444+secondary.Count*SecondaryHeight+(HasCredits?CreditHeight:0);
       var description=new List<string>{L("账户剩余额度 ","Quota remaining ")+(primary==null?"—":QuotaAppearance.Percentage(primary.Remaining)),L("Token 用量 ","Token usage ")+tokenValue,L("AI 工作时长 ","AI work time ")+workValue,taskValue+L(" 个已完成回合"," completed turns")};
       foreach(var window in secondary)description.Add(WindowName(window)+" "+QuotaAppearance.Percentage(window.Remaining)+" "+Reset(window));
       if(HasCredits)description.Add(CreditsText());
       if(state==null||state.Stale||!state.Available)description.Add(L("缓存或暂不可用","Cached or unavailable"));
-      AccessibleName=String.Join("; ",description.ToArray());tooltip.SetToolTip(this,AccessibleName+"\n"+(primary==null?"":WindowName(primary)+" · "+Reset(primary))+"\n"+tokenHint+"\n"+workHint);Invalidate();
+      AccessibleName=String.Join("; ",description.ToArray());
+      AccessibleDescription=tokenHint+"\n"+workHint;
+      Invalidate();
+    }
+    private int HintAt(Point point) {
+      if (!ClientRectangle.Contains(point)) return -1;
+      if (point.Y < Px(PrimaryHeight)) return 0;
+      int top = PrimaryHeight;
+      for (int i = 0; i < secondary.Count; i++) {
+        top += SecondaryHeight;
+        if (point.Y < Px(top)) return 4 + i;
+      }
+      if (HasCredits) top += CreditHeight;
+      if (point.Y < Px(top)) return -1;
+      if (point.Y < Px(top + MetricHeight)) return 1;
+      if (point.Y < Px(top + 2 * MetricHeight)) return 2;
+      return point.Y < Px(top + 2 * MetricHeight + 44) ? 3 : -1;
+    }
+    private string DescribeHint(int row) {
+      if (row == 1) return "Tokens  " + UsageText.Number(exactTokens,false) + "\n" + tokenHint;
+      if (row == 2) return L("工作时长  ","Work time  ") + UsageText.Duration(exactWorkSeconds,english,true) + "\n" + workHint;
+      if (row == 3) return L("完成回合  ","Completed turns  ") + taskValue + "\n" + (partial ? L("本机部分记录","Partial local records") : scopeHint);
+      QuotaWindow window = row == 0 ? (state == null ? null : state.Primary) : (row >= 4 && row - 4 < secondary.Count ? secondary[row - 4] : null);
+      if (window == null) return L("额度暂不可用","Quota unavailable");
+      string status = state.Stale || !state.Available ? L(" · 缓存"," · cached") : "";
+      return WindowName(window) + "  " + QuotaAppearance.Percentage(window.Remaining) + status + "\n" + Reset(window);
     }
     bool HasCredits {get{return state!=null&&(!String.IsNullOrWhiteSpace(state.Credits)||state.ResetCredits.HasValue);}}
     string CreditsText(){return (!String.IsNullOrWhiteSpace(state.Credits)?L("积分 ","Credits ")+state.Credits:"")+(state.ResetCredits.HasValue?(String.IsNullOrWhiteSpace(state.Credits)?"":" · ")+L("重置次数 ","Resets ")+state.ResetCredits.Value:"");}
@@ -61,7 +92,7 @@ namespace CodexQuota {
     void Metric(Graphics g,string label,string value,int y,string hint,string status,bool work) {
       DrawText(g,label,normal,new Rectangle(0,Px(y+15),Width/2,Px(33)),MinimalMaterial.Ink,false);
       DrawText(g,value,work?workFont:valueFont,new Rectangle(Width/2,Px(y+9),Width/2,Px(40)),value=="—"?MinimalMaterial.Muted:MinimalMaterial.Ink,true);
-      Subline(g,hint,status,y+53);Rule(g,y+107);
+      Subline(g,hint,status,y+53);Rule(g,y+MetricHeight);
     }
     protected override void OnPaint(PaintEventArgs e) {
       base.OnPaint(e);if(Width<10)return;Graphics g=e.Graphics;g.SmoothingMode=SmoothingMode.AntiAlias;
@@ -73,12 +104,12 @@ namespace CodexQuota {
       using(var pen=new Pen(Color.FromArgb(236,229,233),3*scale)){pen.StartCap=pen.EndCap=LineCap.Round;g.DrawLine(pen,Px(1),Px(59),Width-Px(1),Px(59));}
       double? remaining=primary==null?null:primary.Remaining;
       if(remaining.HasValue&&!Double.IsNaN(remaining.Value)&&!Double.IsInfinity(remaining.Value)&&remaining.Value>0)using(var pen=new Pen(stale?Color.FromArgb(170,160,173):accent,3*scale)){pen.StartCap=pen.EndCap=LineCap.Round;g.DrawLine(pen,Px(1),Px(59),Px(1)+(Width-Px(2))*(float)Math.Min(100,remaining.Value)/100,Px(59));}
-      Subline(g,stale?L("缓存 / 暂不可用","Cached / unavailable"):WindowName(primary),Reset(primary),73);Rule(g,118);
-      int y=118;
-      foreach(var window in secondary){DrawText(g,WindowName(window)+L("剩余"," remaining"),normal,new Rectangle(0,Px(y+6),Width*2/3,Px(24)),MinimalMaterial.Muted,false);DrawText(g,QuotaAppearance.Percentage(window.Remaining),secondaryFont,new Rectangle(Width*2/3,Px(y+3),Width/3,Px(28)),stale?MinimalMaterial.Muted:MinimalMaterial.Ink,true);DrawText(g,Reset(window),small,new Rectangle(0,Px(y+31),Width,Px(18)),MinimalMaterial.Muted,false);y+=56;Rule(g,y);}
-      if(HasCredits){DrawText(g,CreditsText(),small,new Rectangle(0,Px(y+4),Width,Px(20)),MinimalMaterial.Muted,false);y+=26;Rule(g,y);}
-      Metric(g,L("Token 用量","Token usage"),tokenValue,y,tokenHint,tokenValue=="—"?L("暂无记录","No record"):"",false);y+=107;
-      Metric(g,L("AI 工作时长","AI work time"),workValue,y,L("本机已完成回合","Completed turns on this PC"),L("并行时段已去重","Overlaps merged"),true);y+=107;
+      Subline(g,stale?L("缓存 / 暂不可用","Cached / unavailable"):WindowName(primary),Reset(primary),73);Rule(g,PrimaryHeight);
+      int y=PrimaryHeight;
+      foreach(var window in secondary){DrawText(g,WindowName(window)+L("剩余"," remaining"),normal,new Rectangle(0,Px(y+6),Width*2/3,Px(24)),MinimalMaterial.Muted,false);DrawText(g,QuotaAppearance.Percentage(window.Remaining),secondaryFont,new Rectangle(Width*2/3,Px(y+3),Width/3,Px(28)),stale?MinimalMaterial.Muted:MinimalMaterial.Ink,true);DrawText(g,Reset(window),small,new Rectangle(0,Px(y+31),Width,Px(18)),MinimalMaterial.Muted,false);y+=SecondaryHeight;Rule(g,y);}
+      if(HasCredits){DrawText(g,CreditsText(),small,new Rectangle(0,Px(y+4),Width,Px(20)),MinimalMaterial.Muted,false);y+=CreditHeight;Rule(g,y);}
+      Metric(g,L("Token 用量","Token usage"),tokenValue,y,tokenHint,tokenValue=="—"?L("暂无记录","No record"):"",false);y+=MetricHeight;
+      Metric(g,L("AI 工作时长","AI work time"),workValue,y,L("本机已完成回合","Completed turns on this PC"),L("并行时段已去重","Overlaps merged"),true);y+=MetricHeight;
       DrawText(g,taskValue+L(" 个已完成回合"," completed turns"),normal,new Rectangle(0,Px(y+17),Width*2/3,Px(24)),MinimalMaterial.Ink,false);
       DrawText(g,partial?L("部分记录","Partial records"):scopeHint,small,new Rectangle(Width*2/3,Px(y+17),Width/3,Px(24)),MinimalMaterial.Muted,true);
       string note=L("Token 来自账户统计；工作时长来自本机。\n缺失数据保留为 —，不换算为每小时消耗。","Tokens cover the account; work time covers this PC.\nMissing data stays —; no per-hour rate is inferred.");

@@ -162,12 +162,11 @@ class PopupInteractionTests
             {
                 Call(popup, "Navigate", i % 2 == 0 ? "history" : "home");
                 Panel content = (Panel)Field(popup, i % 2 == 0 ? "mainPage" : "homePage");
-                Call(popup, "Animate", null, EventArgs.Empty);
                 Check(popup.Location == location, "A page switch must not move the top-level popup");
                 Check(Math.Abs(popup.Opacity - 1) < .0001, "Page switches must not flash the whole window opacity");
-                Check(Math.Abs(content.Left - (int)Math.Round(20 * scale)) <= (int)Math.Round(2 * scale), "Page motion stays within two logical pixels");
-                Thread.Sleep(125); Call(popup, "Animate", null, EventArgs.Empty);
-                Check(!((System.Windows.Forms.Timer)Field(popup, "animation")).Enabled, "Page transition is complete within 120 ms");
+                Check(content.Left == (int)Math.Round(20 * scale), "Page controls do not receive a decorative offset");
+                Thread.Sleep(125); Application.DoEvents();
+                Check(Math.Abs(popup.Opacity - 1) < .0001, "No delayed transition changes the window opacity");
                 Check(popup.Location == location && content.Left == (int)Math.Round(20 * scale), "Page transition settles without a final window or content jump");
             }
 

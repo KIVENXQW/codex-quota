@@ -391,9 +391,7 @@ namespace CodexQuota
         private readonly UsageBarChart bars;
         private readonly TokenHeatmap heatmap;
         private readonly GlassUpdateView updateView;
-        private readonly Timer animation;
         private readonly Timer outsideClickDelay;
-        private readonly Stopwatch animationClock = new Stopwatch();
         private readonly PointerHook pointerHook;
         private IntPtr pointerHookHandle;
         private Point targetLocation, requestedPoint;
@@ -401,7 +399,7 @@ namespace CodexQuota
         private UserPreferences preferences = new UserPreferences();
         private string period = "day", homePeriod = "day", page = "home", returnPage = "home";
         private string appliedLanguage, appliedAccent, appliedPanelStyle;
-        private int heatPage = 3, motionOffset;
+        private int heatPage = 3;
         private bool timeMetric, metricSelected, layingOut, applyingPreferences, appearanceInitialized, preserveWindowLocation, outsidePress;
         public event EventHandler RefreshRequested;
         public event EventHandler PreferencesChanged;
@@ -498,12 +496,11 @@ namespace CodexQuota
             updateView.OpenRequested += delegate { ShowUpdates(); };
             updateView.BackRequested += delegate { Navigate(returnPage); };
             updateView.StateChanged += delegate { UpdateHeader(); LayoutPage(); };
-            animation = new Timer(); animation.Interval = 15; animation.Tick += Animate;
             outsideClickDelay = new Timer(); outsideClickDelay.Interval = 35; outsideClickDelay.Tick += DismissAfterOutsideClick;
             pointerHook = ObserveNativePointer;
             VisibleChanged += delegate {
                 if (Visible) StartWatchingOutsideClicks();
-                else { StopWatchingOutsideClicks(); animation.Stop(); animationClock.Reset(); motionOffset = 0; Opacity = 1; }
+                else { StopWatchingOutsideClicks(); Opacity = 1; }
             };
             // A non-activating avatar/corner entry can hand focus back while the
             // pointer crosses into this window. Focus loss alone is not dismissal.
@@ -516,6 +513,18 @@ namespace CodexQuota
             ApplyPreferences(new UserPreferences());
         }
         private Panel PagePanel(string name) { var panel = new GlassPagePanel { Name = name, AutoScroll = true }; Controls.Add(panel); return panel; }
+        protected override void WndProc(ref Message message)
+        {
+            if (message.Msg == GlassPagePanel.VerticalWheelMessage)
+            {
+                // A focused header button can bubble the wheel here while the pointer is over a page.
+                long packed = message.LParam.ToInt64();
+                Point screenPoint = new Point((short)packed, (short)(packed >> 16));
+                GlassPagePanel underPointer = GetChildAtPoint(PointToClient(screenPoint), GetChildAtPointSkip.Invisible) as GlassPagePanel;
+                if (underPointer != null && underPointer.ForwardWheel(ref message)) return;
+            }
+            base.WndProc(ref message);
+        }
         private Label LabelFor(string text, Font font, Color color) {
             return new Label { Text = text, Font = font, ForeColor = color, BackColor = Color.Transparent, AutoEllipsis = true, UseMnemonic = false, TextAlign = ContentAlignment.MiddleLeft };
         }
@@ -710,6 +719,11 @@ namespace CodexQuota
             string stamp = DateTimeOffset.TryParse(state.UpdatedAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out updated) ? updated.ToOffset(TimeSpan.FromHours(8)).ToString("HH:mm:ss") : "—";
             return (state.Stale || !state.Available ? L("缓存 / 暂不可用 · ", "Cached / unavailable · ") : "") + stamp + L(" 更新 · 北京时间", " updated · UTC+8");
         }
+        private static void SetScrolledBounds(Control control, int x, int y, int width, int height) {
+            ScrollableControl parent = control.Parent as ScrollableControl;
+            Point offset = parent == null ? Point.Empty : parent.AutoScrollPosition;
+            control.SetBounds(x + offset.X, y + offset.Y, width, height);
+        }
         private void LayoutPage() {
             if (layingOut || updateView == null) return; layingOut = true;
             try {
@@ -717,133 +731,115 @@ namespace CodexQuota
                 minimalOverview.Visible=false;historyTotals.Visible=false;overview.Visible=quota.Visible=homeTasks.Visible=homeNote.Visible=true;summary.Visible=recordTitle.Visible=records.Visible=true;
                 var panels = new[] { homePage, mainPage, settingsPage, updatePage };
                 var scrolls = new Point[panels.Length];
-                for (int i = 0; i < panels.Length; i++) { scrolls[i] = new Point(-panels[i].AutoScrollPosition.X,-panels[i].AutoScrollPosition.Y); panels[i].SuspendLayout(); panels[i].AutoScrollPosition = Point.Empty; }
-                Rectangle work = Screen.FromPoint(Visible ? targetLocation : requestedPoint).WorkingArea;
+                for (int i = 0; i < panels.Length; i++) { scrolls[i] = new Point(-panels[i].AutoScrollPosition.X,-panels[i].AutoScrollPosition.Y); panels[i].SuspendLayout();  }
+                Size previousSize=Size; Rectangle work = Screen.FromPoint(Visible ? targetLocation : requestedPoint).WorkingArea;
                 Size = new Size(Math.Min(Px(448), Math.Max(1, work.Width-Px(16))), Math.Min(Px(732),Math.Max(1,work.Height-Px(16))));
-                title.SetBounds(Px(18),Px(14),Px(110),Px(32));
+                SetScrolledBounds(title,Px(18),Px(14),Px(110),Px(32));
                 int right = Width-Px(14);
-                close.SetBounds(right-Px(32),Px(12),Px(32),Px(36)); right-=Px(38);
-                refresh.SetBounds(right-Px(56),Px(12),Px(56),Px(36)); right-=Px(62);
+                SetScrolledBounds(close,right-Px(32),Px(12),Px(32),Px(36)); right-=Px(38);
+                SetScrolledBounds(refresh,right-Px(56),Px(12),Px(56),Px(36)); right-=Px(62);
                 appearance.Visible=page!="settings";
-                appearance.SetBounds(right-Px(50),Px(12),Px(50),Px(36)); if(page!="settings")right-=Px(56);
-                updateEntry.SetBounds(right-Px(68),Px(12),Px(68),Px(36)); updateEntry.Visible=updateView.UpdateAvailable||updateView.Busy;
+                SetScrolledBounds(appearance,right-Px(50),Px(12),Px(50),Px(36)); if(page!="settings")right-=Px(56);
+                SetScrolledBounds(updateEntry,right-Px(68),Px(12),Px(68),Px(36)); updateEntry.Visible=updateView.UpdateAvailable||updateView.Busy;
                 title.Width=Math.Max(Px(20),(updateView.UpdateAvailable||updateView.Busy?updateEntry.Left:page=="settings"?refresh.Left:appearance.Left)-title.Left-Px(8));
                 bool auxiliary=page=="settings"||page=="update";
-                navigationRail.SetBounds(Px(14),Px(59),Width-Px(28),Px(49));
+                SetScrolledBounds(navigationRail,Px(14),Px(59),Width-Px(28),Px(49));
                 navigationRail.Visible=homeTab.Visible=historyTab.Visible=!auxiliary;
-                back.SetBounds(Px(16),Px(59),Px(88),Px(42)); back.Visible=page=="settings";
+                SetScrolledBounds(back,Px(16),Px(59),Px(88),Px(42)); back.Visible=page=="settings";
                 int bodyTop = page=="update"?Px(58):Px(122);
-                foreach(var panel in panels)panel.SetBounds(Px(20)+(panel==ActivePage?motionOffset:0),bodyTop,Math.Max(1,Width-Px(40)),Math.Max(1,Height-bodyTop-Px(42)));
+                foreach(var panel in panels)SetScrolledBounds(panel,Px(20),bodyTop,Math.Max(1,Width-Px(40)),Math.Max(1,Height-bodyTop-Px(42)));
                 homePage.Visible=page=="home";mainPage.Visible=page=="history";settingsPage.Visible=page=="settings";updatePage.Visible=page=="update";
-                footer.SetBounds(Px(18),Height-Px(31),Width-Px(36),Px(22));
+                SetScrolledBounds(footer,Px(18),Height-Px(31),Width-Px(36),Px(22));
                 int width=Math.Max(1,homePage.Width-Px(2));
                 int estimatedNoteHeight=Math.Max(Px(60),TextRenderer.MeasureText(homeNote.Text,small,new Size(width,0),TextFormatFlags.WordBreak).Height+Px(10));
                 bool homeScroll=Px(360+quota.DesiredHeight+15+8)+estimatedNoteHeight>homePage.Height;
                 if(homeScroll)width=Math.Max(1,width-SystemInformation.VerticalScrollBarWidth);
-                homePeriodRail.SetBounds(0,0,width,Px(44));
-                homeDate.SetBounds(0,Px(51),width,Px(24));overview.SetBounds(0,Px(82),width,Px(226));homeTasks.SetBounds(Px(2),Px(317),width-Px(4),Px(28));
-                quota.SetBounds(0,Px(360),width,Px(quota.DesiredHeight));
+                SetScrolledBounds(homePeriodRail,0,0,width,Px(44));
+                SetScrolledBounds(homeDate,0,Px(51),width,Px(24));SetScrolledBounds(overview,0,Px(82),width,Px(226));SetScrolledBounds(homeTasks,Px(2),Px(317),width-Px(4),Px(28));
+                SetScrolledBounds(quota,0,Px(360),width,Px(quota.DesiredHeight));
                 int homeNoteHeight=Math.Max(Px(60),TextRenderer.MeasureText(homeNote.Text,small,new Size(width,0),TextFormatFlags.WordBreak).Height+Px(10));
-                homeNote.SetBounds(Px(2),quota.Bottom+Px(15),width-Px(4),homeNoteHeight);homePage.AutoScrollMinSize=new Size(0,homeNote.Bottom+Px(8));
+                SetScrolledBounds(homeNote,Px(2),quota.Bottom-homePage.AutoScrollPosition.Y+Px(15),width-Px(4),homeNoteHeight);homePage.AutoScrollMinSize=new Size(0,homeNote.Bottom-homePage.AutoScrollPosition.Y+Px(8));
                 width=Math.Max(1,mainPage.Width-SystemInformation.VerticalScrollBarWidth-Px(2));
                 int y=0;
-                rangeTitle.SetBounds(0,y,Math.Max(Px(100),width-Px(156)),Px(34));
-                historyPeriodRail.SetBounds(width-Px(150),y,Px(150),Px(36));
-                y+=Px(48);summary.SetBounds(0,y,width,Px(86));y+=Px(105);
-                chartTitle.SetBounds(0,y,Math.Max(Px(100),width-Px(138)),Px(34));metricRail.SetBounds(width-Px(136),y,Px(136),Px(36));
-                y+=Px(43);bars.SetBounds(0,y,width,Px(174));y+=Px(195);
-                heatTitle.SetBounds(0,y,width-Px(96),Px(34));heatPrevious.SetBounds(width-Px(90),y,Px(40),Px(34));heatNext.SetBounds(width-Px(42),y,Px(40),Px(34));y+=Px(39);
-                heatRange.SetBounds(0,y,width,Px(20));y+=Px(31);heatmap.SetBounds(0,y,width,Px(248));y+=Px(267);
-                recordTitle.SetBounds(0,y,width,Px(24));y+=Px(34);records.SetBounds(0,y,width,Px(241));y+=Px(259);
-                int scopeHeight=Math.Max(Px(70),TextRenderer.MeasureText(scope.Text,small,new Size(width,0),TextFormatFlags.WordBreak).Height+Px(12));scope.SetBounds(0,y,width,scopeHeight);y+=scopeHeight+Px(10);mainPage.AutoScrollMinSize=new Size(0,y);
-                settingsCorner.SetBounds(0,0,width,Px(24));cornerRail.SetBounds(0,Px(33),width,Px(46));
-                settingsTransparency.SetBounds(0,Px(102),width-Px(52),Px(25));transparencyValue.SetBounds(width-Px(48),Px(102),Px(48),Px(25));
-                glassTransparency.SetBounds(0,Px(135),width,Px(38));settingsHint.SetBounds(0,Px(182),width,Px(61));
-                settingsLanguage.SetBounds(0,Px(260),width,Px(24));languageRail.SetBounds(0,Px(292),Px(220),Px(44));
-                settingsAccent.SetBounds(0,Px(366),width,Px(25));settingsCustom.SetBounds(0,Px(395),width,Px(23));palette.SetBounds(0,Px(429),width,Px(296));settingsSaved.SetBounds(0,Px(744),width,Px(64));settingsPage.AutoScrollMinSize=new Size(0,Px(816));
+                SetScrolledBounds(rangeTitle,0,y,Math.Max(Px(100),width-Px(156)),Px(34));
+                SetScrolledBounds(historyPeriodRail,width-Px(150),y,Px(150),Px(36));
+                y+=Px(48);SetScrolledBounds(summary,0,y,width,Px(86));y+=Px(105);
+                SetScrolledBounds(chartTitle,0,y,Math.Max(Px(100),width-Px(138)),Px(34));SetScrolledBounds(metricRail,width-Px(136),y,Px(136),Px(36));
+                y+=Px(43);SetScrolledBounds(bars,0,y,width,Px(174));y+=Px(195);
+                SetScrolledBounds(heatTitle,0,y,width-Px(96),Px(34));SetScrolledBounds(heatPrevious,width-Px(90),y,Px(40),Px(34));SetScrolledBounds(heatNext,width-Px(42),y,Px(40),Px(34));y+=Px(39);
+                SetScrolledBounds(heatRange,0,y,width,Px(20));y+=Px(31);SetScrolledBounds(heatmap,0,y,width,Px(248));y+=Px(267);
+                SetScrolledBounds(recordTitle,0,y,width,Px(24));y+=Px(34);SetScrolledBounds(records,0,y,width,Px(241));y+=Px(259);
+                int scopeHeight=Math.Max(Px(70),TextRenderer.MeasureText(scope.Text,small,new Size(width,0),TextFormatFlags.WordBreak).Height+Px(12));SetScrolledBounds(scope,0,y,width,scopeHeight);y+=scopeHeight+Px(10);mainPage.AutoScrollMinSize=new Size(0,y);
                 LayoutThemeSettings(width);
-                updateView.SetBounds(0,0,updatePage.Width,updatePage.Height);updatePage.AutoScrollMinSize=Size.Empty;
+                SetScrolledBounds(updateView,0,0,updatePage.Width,updatePage.Height);updatePage.AutoScrollMinSize=Size.Empty;
                 for(int i=0;i<panels.Length;i++){panels[i].ResumeLayout();panels[i].AutoScrollPosition=scrolls[i];}
                 Region old=Region;using(GraphicsPath path=QuotaAppearance.RoundRectangle(new RectangleF(0,0,Width,Height),Px(22)))Region=new Region(path);if(old!=null)old.Dispose();
-                if(Visible&&!animation.Enabled&&!preserveWindowLocation){targetLocation=ClampPoint(requestedPoint,work);Location=targetLocation;}
+                if(Visible&&Size!=previousSize&&!preserveWindowLocation){targetLocation=ClampPoint(requestedPoint,work);Location=targetLocation;}
             } finally { layingOut=false; }
         }
         private void LayoutThemeSettings(int width) {
-            settingsTheme.SetBounds(0,0,width,Px(24));themeRail.SetBounds(0,Px(31),Px(220),Px(39));
-            settingsCorner.SetBounds(0,Px(93),width,Px(24));cornerRail.SetBounds(0,Px(124),width,Px(42));
-            settingsTransparency.SetBounds(0,Px(188),width-Px(52),Px(25));transparencyValue.SetBounds(width-Px(48),Px(188),Px(48),Px(25));
-            glassTransparency.SetBounds(0,Px(220),width,Px(38));settingsHint.SetBounds(0,Px(266),width,Px(61));
-            settingsLanguage.SetBounds(0,Px(347),width,Px(24));languageRail.SetBounds(0,Px(378),Px(220),Px(39));
-            settingsAccent.SetBounds(0,Px(443),width,Px(25));settingsCustom.SetBounds(0,Px(473),width,Px(23));palette.SetBounds(0,Px(506),width,Px(296));settingsSaved.SetBounds(0,Px(821),width,Px(64));settingsPage.AutoScrollMinSize=new Size(0,Px(893));
+            SetScrolledBounds(settingsTheme,0,0,width,Px(24));SetScrolledBounds(themeRail,0,Px(31),Px(220),Px(39));
+            SetScrolledBounds(settingsCorner,0,Px(93),width,Px(24));SetScrolledBounds(cornerRail,0,Px(124),width,Px(42));
+            SetScrolledBounds(settingsTransparency,0,Px(188),width-Px(52),Px(25));SetScrolledBounds(transparencyValue,width-Px(48),Px(188),Px(48),Px(25));
+            SetScrolledBounds(glassTransparency,0,Px(220),width,Px(38));SetScrolledBounds(settingsHint,0,Px(266),width,Px(61));
+            SetScrolledBounds(settingsLanguage,0,Px(347),width,Px(24));SetScrolledBounds(languageRail,0,Px(378),Px(220),Px(39));
+            SetScrolledBounds(settingsAccent,0,Px(443),width,Px(25));SetScrolledBounds(settingsCustom,0,Px(473),width,Px(23));SetScrolledBounds(palette,0,Px(506),width,Px(296));SetScrolledBounds(settingsSaved,0,Px(821),width,Px(64));settingsPage.AutoScrollMinSize=new Size(0,Px(893));
         }
         private void LayoutMinimalPage() {
             var panels=new[]{homePage,mainPage,settingsPage,updatePage};var scrolls=new Point[panels.Length];
-            for(int i=0;i<panels.Length;i++){scrolls[i]=new Point(-panels[i].AutoScrollPosition.X,-panels[i].AutoScrollPosition.Y);panels[i].SuspendLayout();panels[i].AutoScrollPosition=Point.Empty;}
-            Rectangle work=Screen.FromPoint(Visible?targetLocation:requestedPoint).WorkingArea;
+            for(int i=0;i<panels.Length;i++){scrolls[i]=new Point(-panels[i].AutoScrollPosition.X,-panels[i].AutoScrollPosition.Y);panels[i].SuspendLayout();}
+            Size previousSize=Size; Rectangle work=Screen.FromPoint(Visible?targetLocation:requestedPoint).WorkingArea;
             Size=new Size(Math.Min(Px(410),Math.Max(1,work.Width-Px(16))),Math.Min(Px(646),Math.Max(1,work.Height-Px(16))));
-            int right=Width-Px(20);close.SetBounds(right-Px(24),Px(18),Px(24),Px(24));right-=Px(34);
-            bool showAppearance=page!="settings";appearance.Visible=showAppearance;appearance.SetBounds(right-Px(24),Px(18),Px(24),Px(24));if(showAppearance)right-=Px(34);
-            refresh.SetBounds(right-Px(24),Px(18),Px(24),Px(24));right-=Px(34);
-            bool showUpdate=updateView.UpdateAvailable||updateView.Busy;updateEntry.Visible=showUpdate;updateEntry.SetBounds(right-Px(65),Px(16),Px(65),Px(28));if(showUpdate)right-=Px(72);
-            title.SetBounds(Px(24),Px(17),Math.Max(Px(30),right-Px(30)),Px(28));
+            int right=Width-Px(20);SetScrolledBounds(close,right-Px(24),Px(18),Px(24),Px(24));right-=Px(34);
+            bool showAppearance=page!="settings";appearance.Visible=showAppearance;SetScrolledBounds(appearance,right-Px(24),Px(18),Px(24),Px(24));if(showAppearance)right-=Px(34);
+            SetScrolledBounds(refresh,right-Px(24),Px(18),Px(24),Px(24));right-=Px(34);
+            bool showUpdate=updateView.UpdateAvailable||updateView.Busy;updateEntry.Visible=showUpdate;SetScrolledBounds(updateEntry,right-Px(65),Px(16),Px(65),Px(28));if(showUpdate)right-=Px(72);
+            SetScrolledBounds(title,Px(24),Px(17),Math.Max(Px(30),right-Px(30)),Px(28));
             bool auxiliary=page=="settings"||page=="update";
-            navigationRail.SetBounds(Px(20),Px(61),Width-Px(40),Px(41));navigationRail.Visible=homeTab.Visible=historyTab.Visible=!auxiliary;
-            back.SetBounds(Px(20),Px(65),Px(80),Px(30));back.Visible=page=="settings";
+            SetScrolledBounds(navigationRail,Px(20),Px(61),Width-Px(40),Px(41));navigationRail.Visible=homeTab.Visible=historyTab.Visible=!auxiliary;
+            SetScrolledBounds(back,Px(20),Px(65),Px(80),Px(30));back.Visible=page=="settings";
             int bodyTop=page=="update"?Px(59):Px(122);
-            foreach(var panel in panels)panel.SetBounds(Px(20)+(panel==ActivePage?motionOffset:0),bodyTop,Math.Max(1,Width-Px(40)),Math.Max(1,Height-bodyTop-Px(40)));
+            foreach(var panel in panels)SetScrolledBounds(panel,Px(20),bodyTop,Math.Max(1,Width-Px(40)),Math.Max(1,Height-bodyTop-Px(40)));
             homePage.Visible=page=="home";mainPage.Visible=page=="history";settingsPage.Visible=page=="settings";updatePage.Visible=page=="update";
-            footer.SetBounds(Px(24),Height-Px(30),Width-Px(48),Px(20));
+            SetScrolledBounds(footer,Px(24),Height-Px(30),Width-Px(48),Px(20));
             minimalOverview.Visible=true;overview.Visible=quota.Visible=homeTasks.Visible=homeNote.Visible=false;
             int width=homePage.Width-Px(2);bool needsScroll=Px(minimalOverview.DesiredHeight+40)>homePage.Height;if(needsScroll)width-=SystemInformation.VerticalScrollBarWidth;width=Math.Max(1,width);
-            homeDate.SetBounds(Px(4),0,Px(136),Px(26));homePeriodRail.SetBounds(Math.Max(Px(136),width-Px(224)),0,Math.Min(Px(224),width-Px(136)),Px(27));
-            minimalOverview.SetBounds(Px(4),Px(40),Math.Max(1,width-Px(8)),Px(minimalOverview.DesiredHeight));homePage.AutoScrollMinSize=new Size(0,minimalOverview.Bottom);
+            SetScrolledBounds(homeDate,Px(4),0,Px(136),Px(26));SetScrolledBounds(homePeriodRail,Math.Max(Px(136),width-Px(224)),0,Math.Min(Px(224),width-Px(136)),Px(27));
+            SetScrolledBounds(minimalOverview,Px(4),Px(40),Math.Max(1,width-Px(8)),Px(minimalOverview.DesiredHeight));homePage.AutoScrollMinSize=new Size(0,minimalOverview.Bottom-homePage.AutoScrollPosition.Y);
             width=Math.Max(1,mainPage.Width-SystemInformation.VerticalScrollBarWidth-Px(2));
-            rangeTitle.SetBounds(Px(4),0,width-Px(146),Px(27));historyPeriodRail.SetBounds(width-Px(138),0,Px(138),Px(27));
-            historyTotals.Visible=true;historyTotals.SetBounds(Px(4),Px(27),width-Px(4),Px(16));
-            summary.Visible=false;chartTitle.SetBounds(Px(4),Px(43),width-Px(142),Px(26));metricRail.SetBounds(width-Px(134),Px(43),Px(134),Px(26));
-            bars.SetBounds(0,Px(78),width,Px(162));
-            heatTitle.SetBounds(Px(4),Px(248),width-Px(82),Px(28));heatPrevious.SetBounds(width-Px(72),Px(248),Px(30),Px(28));heatNext.SetBounds(width-Px(34),Px(248),Px(30),Px(28));
-            heatRange.SetBounds(Px(4),Px(277),width-Px(4),Px(21));heatmap.SetBounds(0,Px(305),width,Px(170));
-            recordTitle.Visible=records.Visible=true;recordTitle.SetBounds(Px(4),Px(521),width-Px(4),Px(25));records.SetBounds(0,Px(557),width,Px(241));
-            int scopeHeight=Math.Max(Px(70),TextRenderer.MeasureText(scope.Text,small,new Size(width,0),TextFormatFlags.WordBreak).Height+Px(12));scope.SetBounds(Px(4),Px(817),width-Px(4),scopeHeight);mainPage.AutoScrollMinSize=new Size(0,scope.Bottom+Px(10));
+            SetScrolledBounds(rangeTitle,Px(4),0,width-Px(146),Px(27));SetScrolledBounds(historyPeriodRail,width-Px(138),0,Px(138),Px(27));
+            historyTotals.Visible=true;SetScrolledBounds(historyTotals,Px(4),Px(27),width-Px(4),Px(16));
+            summary.Visible=false;SetScrolledBounds(chartTitle,Px(4),Px(43),width-Px(142),Px(26));SetScrolledBounds(metricRail,width-Px(134),Px(43),Px(134),Px(26));
+            SetScrolledBounds(bars,0,Px(78),width,Px(162));
+            SetScrolledBounds(heatTitle,Px(4),Px(248),width-Px(82),Px(28));SetScrolledBounds(heatPrevious,width-Px(72),Px(248),Px(30),Px(28));SetScrolledBounds(heatNext,width-Px(34),Px(248),Px(30),Px(28));
+            SetScrolledBounds(heatRange,Px(4),Px(277),width-Px(4),Px(21));SetScrolledBounds(heatmap,0,Px(305),width,Px(170));
+            recordTitle.Visible=records.Visible=true;SetScrolledBounds(recordTitle,Px(4),Px(521),width-Px(4),Px(25));SetScrolledBounds(records,0,Px(557),width,Px(241));
+            int scopeHeight=Math.Max(Px(70),TextRenderer.MeasureText(scope.Text,small,new Size(width,0),TextFormatFlags.WordBreak).Height+Px(12));SetScrolledBounds(scope,Px(4),Px(817),width-Px(4),scopeHeight);mainPage.AutoScrollMinSize=new Size(0,scope.Bottom-mainPage.AutoScrollPosition.Y+Px(10));
             LayoutThemeSettings(width);
-            updateView.SetBounds(0,0,updatePage.Width,updatePage.Height);updatePage.AutoScrollMinSize=Size.Empty;
+            SetScrolledBounds(updateView,0,0,updatePage.Width,updatePage.Height);updatePage.AutoScrollMinSize=Size.Empty;
             for(int i=0;i<panels.Length;i++){panels[i].ResumeLayout();panels[i].AutoScrollPosition=scrolls[i];}
             Region previous=Region;using(var path=QuotaAppearance.RoundRectangle(new RectangleF(0,0,Width,Height),Px(16)))Region=new Region(path);if(previous!=null)previous.Dispose();
-            if(Visible&&!animation.Enabled&&!preserveWindowLocation){targetLocation=ClampPoint(requestedPoint,work);Location=targetLocation;}
+            if(Visible&&Size!=previousSize&&!preserveWindowLocation){targetLocation=ClampPoint(requestedPoint,work);Location=targetLocation;}
         }
         private Point ClampPoint(Point point,Rectangle work) { return new Point(Math.Max(work.Left+Px(8),Math.Min(point.X,work.Right-Width-Px(8))),Math.Max(work.Top+Px(8),Math.Min(point.Y,work.Bottom-Height-Px(8)))); }
         private void Navigate(string next) {
             if(page==next)return;
             if(next=="settings"||next=="update") { if(page=="home"||page=="history")returnPage=page; }
-            animation.Stop(); motionOffset = 0; page=next; Opacity=1;
+            page=next; Opacity=1;
             preserveWindowLocation = true;
             try { UpdateHeader(); LayoutPage(); }
             finally { preserveWindowLocation = false; }
-            if(Visible&&SystemInformation.IsMenuAnimationEnabled) StartPageMotion();
         }
         public void ShowUpdates() {
             Navigate("update");
             if(!Visible){EventHandler handler=OpenUpdateRequested;if(handler!=null)handler(this,EventArgs.Empty);}
         }
         public void ShowAt(Point point) {
-            bool animate=!Visible&&SystemInformation.IsMenuAnimationEnabled;
-            animation.Stop(); motionOffset=0; requestedPoint=point;LayoutPage();targetLocation=ClampPoint(point,Screen.FromPoint(point).WorkingArea);
+            requestedPoint=point;LayoutPage();targetLocation=ClampPoint(point,Screen.FromPoint(point).WorkingArea);
             Location=targetLocation;Opacity=1;
-            if(animate)StartPageMotion();
             if(!Visible)Show();Activate();
         }
         private Panel ActivePage { get { return page=="home"?homePage:page=="history"?mainPage:page=="settings"?settingsPage:updatePage; } }
-        private void StartPageMotion() {
-            motionOffset=Px(2);ActivePage.Left=Px(20)+motionOffset;
-            animationClock.Restart();animation.Start();
-        }
-        private void Animate(object sender,EventArgs e) {
-            if(!animation.Enabled)return;
-            double progress=Math.Min(1,animationClock.Elapsed.TotalMilliseconds/120),eased=1-Math.Pow(1-progress,3);
-            motionOffset=(int)Math.Round(Px(2)*(1-eased));ActivePage.Left=Px(20)+motionOffset;
-            if(progress>=1){animation.Stop();animationClock.Reset();motionOffset=0;ActivePage.Left=Px(20);}
-        }
         protected override void OnFormClosing(FormClosingEventArgs e){if(e.CloseReason==CloseReason.UserClosing){e.Cancel=true;Hide();}base.OnFormClosing(e);}
         protected override void OnPaintBackground(PaintEventArgs e) {
             if(Width<1||Height<1)return;
@@ -861,7 +857,7 @@ namespace CodexQuota
             using(Pen border=new Pen(Color.FromArgb(180,Color.White)))using(GraphicsPath path=QuotaAppearance.RoundRectangle(new RectangleF(.8f,.8f,Width-1.6f,Height-1.6f),Px(22)))e.Graphics.DrawPath(border,path);
             using(Pen line=new Pen(Color.FromArgb(22,preferences.AccentColor)))e.Graphics.DrawLine(line,Px(18),Height-Px(39),Width-Px(18),Height-Px(39));
         }
-        protected override void Dispose(bool disposing) { if(disposing){StopWatchingOutsideClicks();outsideClickDelay.Dispose();animation.Dispose();}base.Dispose(disposing);if(disposing){regular.Dispose();small.Dispose();valueFont.Dispose();headingFont.Dispose();} }
+        protected override void Dispose(bool disposing) { if(disposing){StopWatchingOutsideClicks();outsideClickDelay.Dispose();}base.Dispose(disposing);if(disposing){regular.Dispose();small.Dispose();valueFont.Dispose();headingFont.Dispose();} }
     }
 
     internal sealed class MetricCards : Control
@@ -943,18 +939,18 @@ namespace CodexQuota
     {
         private readonly float scale;
         private readonly Font regular, small, large;
-        private readonly ToolTip tooltip = new ToolTip();
+        private readonly DwellTextTip tooltip;
         private readonly List<RectangleF> areas = new List<RectangleF>();
         private QuotaState state;
         private Color accent;
         private bool english;
-        private int hovered = -1;
         internal int DesiredHeight { get; private set; }
         internal QuotaSummaryView(float factor, Font normal, Font little, Font value)
         {
             scale = factor; regular = normal; small = little; large = value;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent; DesiredHeight = 112; tooltip.InitialDelay = 100; tooltip.AutoPopDelay = 15000;
+            BackColor = Color.Transparent; DesiredHeight = 112;
+            tooltip = new DwellTextTip(this, scale, WindowAt, DescribeWindow);
         }
         internal void SetData(QuotaState next, Color color, bool useEnglish)
         {
@@ -962,7 +958,7 @@ namespace CodexQuota
             int count = state == null || state.Windows == null ? 0 : state.Windows.Count;
             DesiredHeight = count == 0 ? 96 : 28 + (int)Math.Ceiling(count / 2d) * 94;
             if (state != null && (!String.IsNullOrWhiteSpace(state.Credits) || state.ResetCredits.HasValue)) DesiredHeight += 25;
-            AccessibleName = english ? "Account quota" : "账户额度"; areas.Clear(); hovered = -1; tooltip.SetToolTip(this, ""); Invalidate();
+            AccessibleName = english ? "Account quota" : "账户额度"; areas.Clear(); tooltip.Cancel(); Invalidate();
         }
         private string WindowName(QuotaWindow window)
         {
@@ -1001,7 +997,7 @@ namespace CodexQuota
             }
             for (int i = 0; i < count; i++)
             {
-                QuotaWindow window = state.Windows[i]; if (window == null) continue;
+                QuotaWindow window = state.Windows[i]; if (window == null) { areas.Add(RectangleF.Empty); continue; }
                 RectangleF card = new RectangleF((i % columns) * cardWidth, 29 * scale + (i / columns) * 94 * scale, cardWidth, 85 * scale); areas.Add(card);
                 Draw(e.Graphics, WindowName(window) + (english ? " remaining" : "剩余"), small, new RectangleF(card.X + 11 * scale, card.Y + 8 * scale, cardWidth - 22 * scale, 16 * scale), QuotaAppearance.Muted);
                 Draw(e.Graphics, QuotaAppearance.Percentage(window.Remaining), large, new RectangleF(card.X + 11 * scale, card.Y + 27 * scale, cardWidth - 22 * scale, 27 * scale), state.Stale ? QuotaAppearance.Muted : QuotaAppearance.Text);
@@ -1017,16 +1013,18 @@ namespace CodexQuota
             if (extras.Length > 0) Draw(e.Graphics, extras, small, new RectangleF(0, Height - 21 * scale, Width, 20 * scale), QuotaAppearance.Muted);
         }
         private void Draw(Graphics g, string text, Font font, RectangleF rect, Color color) { TextRenderer.DrawText(g, text, font, Rectangle.Round(rect), color, TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding); }
-        protected override void OnMouseMove(MouseEventArgs e)
+        private int WindowAt(Point point)
         {
-            base.OnMouseMove(e); int next = -1;
-            for (int i = 0; i < areas.Count; i++) if (areas[i].Contains(e.Location)) { next = i; break; }
-            if (state == null || state.Windows == null || next >= state.Windows.Count) next = -1;
-            if (next == hovered) return; hovered = next;
-            if (next < 0 || state == null) { tooltip.SetToolTip(this, ""); return; }
-            QuotaWindow window = state.Windows[next]; DateTime? reset = QuotaAppearance.ResetTime(window.ResetAt);
+            for (int i = 0; i < areas.Count; i++)
+                if (areas[i].Contains(point)) return i;
+            return -1;
+        }
+        private string DescribeWindow(int index)
+        {
+            if (state == null || index < 0 || index >= state.Windows.Count || state.Windows[index] == null) return "";
+            QuotaWindow window = state.Windows[index]; DateTime? reset = QuotaAppearance.ResetTime(window.ResetAt);
             double? used = window.Used.HasValue ? window.Used : window.Remaining.HasValue ? 100 - window.Remaining : null;
-            tooltip.SetToolTip(this, WindowName(window) + "\n" + (english ? "Remaining " : "剩余 ") + QuotaAppearance.Percentage(window.Remaining) + "\n" + (english ? "Used " : "已使用 ") + QuotaAppearance.Percentage(used) + "\n" + (english ? "Reset " : "重置 ") + (reset.HasValue ? reset.Value.ToString("yyyy-MM-dd HH:mm") + " UTC+8" : "—"));
+            return WindowName(window) + "  " + (english ? "Remaining " : "剩余 ") + QuotaAppearance.Percentage(window.Remaining) + "\n" + (english ? "Used " : "已使用 ") + QuotaAppearance.Percentage(used) + "\n" + (english ? "Reset " : "重置 ") + (reset.HasValue ? reset.Value.ToString("yyyy-MM-dd HH:mm") + " UTC+8" : "—");
         }
         protected override void Dispose(bool disposing) { if (disposing) tooltip.Dispose(); base.Dispose(disposing); }
     }
