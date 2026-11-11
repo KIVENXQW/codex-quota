@@ -10,6 +10,8 @@ namespace Kiven.WeeklyQuota {
     [StructLayout(LayoutKind.Sequential)] struct NativePoint { public int X,Y; }
     [StructLayout(LayoutKind.Sequential)] struct NativeRect { public int Left,Top,Right,Bottom; }
     [DllImport("user32.dll")] [return:MarshalAs(UnmanagedType.Bool)] internal static extern bool IsWindow(IntPtr window);
+    [DllImport("user32.dll")] [return:MarshalAs(UnmanagedType.Bool)] internal static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll")] [return:MarshalAs(UnmanagedType.Bool)] internal static extern bool IsIconic(IntPtr window);
     [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr window);
     [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr window,uint command);
     [DllImport("user32.dll",EntryPoint="GetWindowLongW")] static extern int GetWindowLong(IntPtr window,int index);

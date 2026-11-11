@@ -40,7 +40,12 @@ namespace Kiven.WeeklyQuota
                     using (EventWaitHandle open = new EventWaitHandle(false, EventResetMode.AutoReset, OpenName))
                     using (EventWaitHandle quit = new EventWaitHandle(false, EventResetMode.AutoReset, QuitName))
                     using (WeeklyPanel panel = new WeeklyPanel(open, quit))
-                        Application.Run(panel);
+                    using (ApplicationContext context = new ApplicationContext())
+                    {
+                        panel.FormClosed += delegate { context.ExitThread(); };
+                        panel.StartMonitoring();
+                        Application.Run(context);
+                    }
                 }
                 finally { mutex.ReleaseMutex(); }
             }
@@ -61,9 +66,11 @@ namespace Kiven.WeeklyQuota
             if (!Path.IsPathRooted(path)) return 2;
             WeeklyState state = mode == "--preview-unavailable" ? WeeklyState.Unavailable("no_weekly") :
                 WeeklyState.FromJson("{\"available\":true,\"remainingPercent\":" + (mode == "--preview-zero" ? "0" : "68") + ",\"resetsAt\":1794623400}", DateTimeOffset.Parse("2026-11-11T10:00:00Z"));
-            using (Bitmap bitmap = new Bitmap(320, 184, PixelFormat.Format32bppArgb))
+            using (Bitmap bitmap = new Bitmap(PanelDrawing.Width, PanelDrawing.Height, PixelFormat.Format32bppArgb))
             using (Graphics graphics = Graphics.FromImage(bitmap))
+            using (GraphicsPath outline = PanelDrawing.RoundedRectangle(new RectangleF(0, 0, bitmap.Width, bitmap.Height), PanelDrawing.Corner))
             {
+                graphics.SetClip(outline);
                 PanelDrawing.Draw(graphics, state, 1F);
                 bitmap.Save(path, ImageFormat.Png);
             }
@@ -79,6 +86,7 @@ namespace Kiven.WeeklyQuota
         private readonly EventWaitHandle quitSignal;
         private readonly ManualResetEvent stopSignals = new ManualResetEvent(false);
         private readonly System.Windows.Forms.Timer refreshTimer = new System.Windows.Forms.Timer();
+        private readonly System.Windows.Forms.Timer placementTimer = new System.Windows.Forms.Timer();
         private readonly NotifyIcon tray = new NotifyIcon();
         private readonly ContextMenuStrip trayMenu = new ContextMenuStrip();
         private readonly Button updateButton = new Button();
@@ -97,6 +105,8 @@ namespace Kiven.WeeklyQuota
         private float scale;
         private DateTimeOffset nextRefresh = DateTimeOffset.MinValue;
         private DateTimeOffset nextUpdateCheck = DateTimeOffset.MinValue;
+        private bool pendingOpen, hasAnchored;
+        private DateTimeOffset openDeadline;
 
         public WeeklyPanel(EventWaitHandle open, EventWaitHandle quit)
         {
@@ -109,17 +119,18 @@ namespace Kiven.WeeklyQuota
             Text = "周额度";
             BackColor = PanelDrawing.Background;
             DoubleBuffered = true;
-            ClientSize = new Size((int)(320 * scale), (int)(184 * scale));
-            using (GraphicsPath path = PanelDrawing.RoundedRectangle(new RectangleF(0, 0, ClientSize.Width, ClientSize.Height), 14F * scale)) Region = new Region(path);
+            ClientSize = new Size((int)Math.Round(PanelDrawing.Width * scale), (int)Math.Round(PanelDrawing.Height * scale));
+            using (GraphicsPath path = PanelDrawing.RoundedRectangle(new RectangleF(0, 0, ClientSize.Width, ClientSize.Height), PanelDrawing.Corner * scale))
+                Region = new Region(path);
             string iconPath = Path.Combine(root, "assets", "launcher.ico");
             Icon = File.Exists(iconPath) ? new Icon(iconPath) : SystemIcons.Application;
             tray.Icon = Icon;
             ApplyState(state);
-            updateButton.SetBounds((int)(133 * scale), (int)(17 * scale), (int)(138 * scale), (int)(30 * scale));
+            updateButton.SetBounds((int)(139 * scale), (int)(5 * scale), (int)(139 * scale), (int)(28 * scale));
             updateButton.FlatStyle = FlatStyle.Flat;
             updateButton.FlatAppearance.BorderSize = 0;
             updateButton.BackColor = PanelDrawing.Background;
-            updateButton.ForeColor = Color.FromArgb(139, 66, 88);
+            updateButton.ForeColor = Color.FromArgb(141, 47, 90);
             updateButton.Font = new Font("Microsoft YaHei UI", 12F * scale, FontStyle.Regular, GraphicsUnit.Pixel);
             updateButton.Cursor = Cursors.Hand;
             updateButton.AutoEllipsis = true;
@@ -146,15 +157,35 @@ namespace Kiven.WeeklyQuota
                 if (now >= nextRefresh) RefreshReading();
                 if (now >= nextUpdateCheck) CheckUpdate(false);
             };
-            Shown += delegate {
-                Rectangle area = Screen.FromControl(this).WorkingArea;
-                Location = new Point(area.Right - Width - (int)(24 * scale), area.Bottom - Height - (int)(24 * scale));
-                sidebar = new WeeklySidebar(this, OpenPanel, state);
-                sidebar.UpdatePosition();
-                signalThread = new Thread(WatchSignals) { IsBackground = true, Name = "WeeklyQuota signals" };
-                tray.Visible = true;
-                signalThread.Start(); refreshTimer.Start(); RefreshReading(); CheckUpdate(false);
-            };
+            placementTimer.Interval = 100;
+            placementTimer.Tick += delegate { if (Visible || pendingOpen) PositionPanel(); };
+        }
+
+        internal void StartMonitoring()
+        {
+            // Make the dispatch HWND available for tracker callbacks before showing the popup.
+            if (!IsHandleCreated) CreateHandle();
+            sidebar = new WeeklySidebar(this, OpenPanel, state);
+            sidebar.UpdatePosition();
+            signalThread = new Thread(WatchSignals) { IsBackground = true, Name = "WeeklyQuota signals" };
+            tray.Visible = true;
+            signalThread.Start();
+            refreshTimer.Start();
+            placementTimer.Start();
+            RefreshReading();
+            CheckUpdate(false);
+            OpenPanel();
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            if (Environment.OSVersion.Version.Major >= 10)
+            {
+                // DWMWA_BORDER_COLOR / DWMWA_COLOR_NONE. Older Windows ignores this attribute.
+                int color = unchecked((int)0xfffffffe);
+                DwmSetWindowAttribute(Handle, 34, ref color, sizeof(int));
+            }
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -186,9 +217,7 @@ namespace Kiven.WeeklyQuota
         {
             base.OnMouseDown(e);
             if (e.Button != MouseButtons.Left) return;
-            if (new RectangleF(274 * scale, 10 * scale, 36 * scale, 36 * scale).Contains(e.Location)) { Hide(); return; }
-            ReleaseCapture();
-            SendMessage(Handle, 0xA1, new IntPtr(2), IntPtr.Zero);
+            if (new RectangleF(280 * scale, 2 * scale, 36 * scale, 34 * scale).Contains(e.Location)) Hide();
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -201,7 +230,39 @@ namespace Kiven.WeeklyQuota
         private void OpenPanel()
         {
             if (exiting) return;
-            Show(); WindowState = FormWindowState.Normal; Activate(); BringToFront();
+            pendingOpen = true;
+            openDeadline = DateTimeOffset.UtcNow.AddSeconds(2);
+            PositionPanel();
+        }
+
+        private void PositionPanel()
+        {
+            if (exiting) return;
+            Rectangle anchor;
+            if (sidebar != null && sidebar.TryGetAnchor(out anchor))
+            {
+                Rectangle work = Screen.FromRectangle(anchor).WorkingArea;
+                Point pinned = PanelDrawing.PinnedLocation(anchor, work, Size, (int)Math.Round(10 * scale));
+                if (Location != pinned) Location = pinned;
+                hasAnchored = true;
+            }
+            else if (pendingOpen && !hasAnchored)
+            {
+                // Allow the first avatar probe to finish while the window is still hidden.
+                if (DateTimeOffset.UtcNow < openDeadline) return;
+                Rectangle work = Screen.PrimaryScreen.WorkingArea;
+                int gap = (int)Math.Round(16 * scale);
+                Location = new Point(Math.Max(work.Left, work.Right - Width - gap),
+                    Math.Max(work.Top, work.Bottom - Height - gap));
+            }
+            if (pendingOpen)
+            {
+                pendingOpen = false;
+                WindowState = FormWindowState.Normal;
+                if (!Visible) Show();
+                BringToFront();
+                Activate();
+            }
         }
 
         private void WatchSignals()
@@ -367,7 +428,7 @@ namespace Kiven.WeeklyQuota
         private async void ExitPanel()
         {
             if (exiting) return;
-            exiting = true; refreshTimer.Stop(); Hide(); tray.Visible = false; stopSignals.Set();
+            exiting = true; pendingOpen = false; placementTimer.Stop(); refreshTimer.Stop(); Hide(); tray.Visible = false; stopSignals.Set();
             DisposeSidebar();
             Process current, update;
             lock (workerGate) { current = worker; update = updateWorker; }
@@ -392,14 +453,13 @@ namespace Kiven.WeeklyQuota
                 DisposeSidebar();
                 stopSignals.Set();
                 if (signalThread != null && signalThread != Thread.CurrentThread) signalThread.Join(250);
-                refreshTimer.Dispose(); tray.Dispose(); trayMenu.Dispose(); stopSignals.Dispose();
+                placementTimer.Dispose(); refreshTimer.Dispose(); tray.Dispose(); trayMenu.Dispose(); stopSignals.Dispose();
                 if (Icon != null && !Object.ReferenceEquals(Icon, SystemIcons.Application)) Icon.Dispose();
             }
             base.Dispose(disposing);
         }
 
-        [DllImport("user32.dll")] private static extern bool ReleaseCapture();
-        [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam);
+        [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
     }
 
     internal sealed class UpdateResult
@@ -448,7 +508,18 @@ namespace Kiven.WeeklyQuota
 
     internal static class PanelDrawing
     {
-        internal static readonly Color Background = Color.FromArgb(251, 250, 248);
+        internal const int Width = 320, Height = 96, Corner = 12;
+        internal static readonly Color Background = Color.White;
+        internal static readonly Color Accent = Color.FromArgb(240, 119, 175);
+
+        internal static Point PinnedLocation(Rectangle anchor, Rectangle work, Size panel, int gap)
+        {
+            int x = anchor.Right + gap;
+            if (x + panel.Width > work.Right) x = anchor.Left - gap - panel.Width;
+            int y = anchor.Top + (anchor.Height - panel.Height) / 2;
+            return new Point(Math.Max(work.Left, Math.Min(x, work.Right - panel.Width)),
+                Math.Max(work.Top, Math.Min(y, work.Bottom - panel.Height)));
+        }
 
         public static void Draw(Graphics graphics, WeeklyState state, float scale)
         {
@@ -456,28 +527,27 @@ namespace Kiven.WeeklyQuota
             graphics.ScaleTransform(scale, scale);
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
             graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-            graphics.Clear(Color.Transparent);
-            using (GraphicsPath card = RoundedRectangle(new RectangleF(0.5F, 0.5F, 319F, 183F), 14F))
-            using (SolidBrush background = new SolidBrush(Background))
-            using (Pen border = new Pen(Color.FromArgb(232, 226, 220), 1F))
-            { graphics.FillPath(background, card); graphics.DrawPath(border, card); }
-            using (Font title = new Font("Microsoft YaHei UI", 13F, FontStyle.Regular, GraphicsUnit.Pixel))
-            using (Font number = new Font("Segoe UI Semibold", 64F, FontStyle.Regular, GraphicsUnit.Pixel))
-            using (Font detail = new Font("Microsoft YaHei UI", 12.5F, FontStyle.Regular, GraphicsUnit.Pixel))
-            using (SolidBrush labelBrush = new SolidBrush(Color.FromArgb(147, 113, 105)))
-            using (SolidBrush numberBrush = new SolidBrush(Color.FromArgb(43, 39, 35)))
-            using (SolidBrush detailBrush = new SolidBrush(Color.FromArgb(126, 117, 109)))
+            // Paint opaque white up to the native window region. Transparent GDI pixels
+            // became black at the corners on screen even when the PNG preview looked clear.
+            graphics.FillRectangle(Brushes.White, -1, -1, Width + 2, Height + 2);
+            using (Font title = new Font("Microsoft YaHei UI", 15F, FontStyle.Bold, GraphicsUnit.Pixel))
+            using (Font number = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Pixel))
+            using (Font detail = new Font("Microsoft YaHei UI", 12F, FontStyle.Regular, GraphicsUnit.Pixel))
+            using (SolidBrush mainBrush = new SolidBrush(Color.FromArgb(38, 38, 42)))
+            using (SolidBrush detailBrush = new SolidBrush(Color.FromArgb(94, 94, 100)))
             using (StringFormat format = new StringFormat(StringFormat.GenericTypographic))
             {
-                graphics.DrawString("周额度剩余", title, labelBrush, new PointF(28, 27), format);
-                graphics.DrawString(state.NumberText, number, numberBrush, new PointF(24, 53), format);
-                graphics.DrawString(state.DetailText, detail, detailBrush, new PointF(28, 145), format);
+                graphics.DrawString("周额度", title, mainBrush, new PointF(18, 12), format);
+                graphics.DrawString("剩余 " + state.NumberText, number, mainBrush, new PointF(18, 59), format);
+                format.Alignment = StringAlignment.Far;
+                format.FormatFlags |= StringFormatFlags.NoWrap;
+                graphics.DrawString(state.DetailText, detail, detailBrush, new RectangleF(110, 60, 192, 24), format);
             }
             if (state.RemainingPercent.HasValue)
             {
-                RectangleF track = new RectangleF(28F, 130F, 264F, 5F);
+                RectangleF track = new RectangleF(18F, 43F, 284F, 6F);
                 using (GraphicsPath trackPath = RoundedRectangle(track, track.Height / 2F))
-                using (SolidBrush trackBrush = new SolidBrush(Color.FromArgb(228, 225, 222)))
+                using (SolidBrush trackBrush = new SolidBrush(Color.FromArgb(249, 229, 238)))
                     graphics.FillPath(trackBrush, trackPath);
 
                 float filledWidth = (float)(track.Width * state.RemainingPercent.Value / 100D);
@@ -485,14 +555,14 @@ namespace Kiven.WeeklyQuota
                 {
                     RectangleF fill = new RectangleF(track.X, track.Y, filledWidth, track.Height);
                     using (GraphicsPath fillPath = RoundedRectangle(fill, Math.Min(fill.Width, fill.Height) / 2F))
-                    using (SolidBrush fillBrush = new SolidBrush(Color.FromArgb(174, 104, 122)))
+                    using (SolidBrush fillBrush = new SolidBrush(Accent))
                         graphics.FillPath(fillBrush, fillPath);
                 }
             }
-            using (Pen close = new Pen(Color.FromArgb(157, 147, 138), 1.15F))
+            using (Pen close = new Pen(Color.FromArgb(147, 145, 151), 1.25F))
             {
                 close.StartCap = LineCap.Round; close.EndCap = LineCap.Round;
-                graphics.DrawLine(close, 287, 23, 294, 30); graphics.DrawLine(close, 294, 23, 287, 30);
+                graphics.DrawLine(close, 291, 17, 298, 24); graphics.DrawLine(close, 298, 17, 291, 24);
             }
             graphics.Restore(saved);
         }

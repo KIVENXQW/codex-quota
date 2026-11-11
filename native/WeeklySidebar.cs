@@ -8,7 +8,7 @@ namespace Kiven.WeeklyQuota
 {
     internal sealed class WeeklySidebar : IDisposable
     {
-        private readonly WindowTracker tracker = new WindowTracker();
+        private readonly WindowTracker tracker;
         private readonly Control dispatcher;
         private readonly Action openPanel;
         private WeeklyState state;
@@ -20,6 +20,7 @@ namespace Kiven.WeeklyQuota
         {
             this.dispatcher = dispatcher;
             this.openPanel = openPanel;
+            tracker = new WindowTracker(dispatcher.Handle);
             state = initial;
             tracker.Changed += QueuePosition;
         }
@@ -44,6 +45,12 @@ namespace Kiven.WeeklyQuota
             if (badge != null && !badge.IsDisposed) badge.SetState(value);
         }
 
+        internal bool TryGetAnchor(out Rectangle screenBounds)
+        {
+            screenBounds = Rectangle.Empty;
+            return !disposed && badge != null && badge.TryGetAnchor(tracker.Target, out screenBounds);
+        }
+
         internal void UpdatePosition()
         {
             if (disposed) return;
@@ -65,7 +72,7 @@ namespace Kiven.WeeklyQuota
             if (layoutVersion != tracker.LayoutVersion || !badge.IsAttachedTo(tracker.Target))
             {
                 layoutVersion = -1;
-                int pixels = Math.Max(1, (int)Math.Round(24 * tracker.Scale));
+                int pixels = Math.Max(1, (int)Math.Round(WeeklySidebarBadge.SurfaceDip * tracker.Scale));
                 Size size = new Size(pixels, pixels);
                 Point screen, client;
                 if (!tracker.TryBadgeLocation(size, out screen) ||
@@ -93,6 +100,8 @@ namespace Kiven.WeeklyQuota
 
     internal sealed class WeeklySidebarBadge : Form
     {
+        internal const int SurfaceDip = 30;
+        private const int RingDip = 24;
         private readonly RingButton ring = new RingButton();
         private readonly ToolTip tip = new ToolTip();
         private IntPtr host;
@@ -105,7 +114,7 @@ namespace Kiven.WeeklyQuota
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
             BackColor = ring.BackColor;
-            ring.Dock = DockStyle.Fill;
+            ring.Dock = DockStyle.None;
             ring.Click += delegate { openPanel(); };
             Controls.Add(ring);
         }
@@ -123,6 +132,17 @@ namespace Kiven.WeeklyQuota
         internal bool IsAttachedTo(IntPtr parent)
         {
             return parent != IntPtr.Zero && host == parent && IsHandleCreated && BadgeAttachment.IsChildOf(Handle, parent);
+        }
+
+        internal bool TryGetAnchor(IntPtr parent, out Rectangle screenBounds)
+        {
+            screenBounds = Rectangle.Empty;
+            if (IsDisposed || !Visible || !IsAttachedTo(parent) ||
+                !BadgeAttachment.IsWindowVisible(Handle) || BadgeAttachment.IsIconic(parent)) return false;
+            Rectangle bounds = BadgeAttachment.ScreenBounds(Handle);
+            if (bounds.Width <= 0 || bounds.Height <= 0) return false;
+            screenBounds = bounds;
+            return true;
         }
 
         protected override bool ShowWithoutActivation { get { return true; } }
@@ -163,6 +183,10 @@ namespace Kiven.WeeklyQuota
                     if (Size != size || Region == null)
                     {
                         Size = size;
+                        // The small white margin covers the antialiased edge of the original glyph.
+                        // Only the 24-DIP center button opens the quota panel.
+                        int ringSize = Math.Max(1, (int)Math.Round(size.Width * RingDip / (double)SurfaceDip));
+                        ring.SetBounds((size.Width - ringSize) / 2, (size.Height - ringSize) / 2, ringSize, ringSize);
                         Region previous = Region;
                         using (GraphicsPath circle = new GraphicsPath())
                         {
@@ -206,7 +230,7 @@ namespace Kiven.WeeklyQuota
             {
                 FlatStyle = FlatStyle.Flat;
                 FlatAppearance.BorderSize = 0;
-                BackColor = Color.FromArgb(247, 251, 249);
+                BackColor = Color.White;
                 Cursor = Cursors.Hand;
                 AccessibleRole = AccessibleRole.PushButton;
                 SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);

@@ -7,10 +7,10 @@ namespace Kiven.WeeklyQuota
 {
     internal static class WeeklyRing
     {
-        private static readonly Color Face = Color.FromArgb(248, 251, 249);
-        private static readonly Color Track = Color.FromArgb(219, 231, 225);
-        private static readonly Color Active = Color.FromArgb(54, 142, 121);
-        private static readonly Color Ink = Color.FromArgb(33, 78, 67);
+        private static readonly Color Face = Color.White;
+        private static readonly Color Track = Color.FromArgb(249, 226, 237);
+        private static readonly Color Active = Color.FromArgb(240, 119, 175);
+        private static readonly Color Ink = Color.FromArgb(47, 39, 45);
         private static readonly Color UnknownTrack = Color.FromArgb(215, 221, 218);
         private static readonly Color UnknownInk = Color.FromArgb(112, 126, 119);
 

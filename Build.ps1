@@ -28,6 +28,11 @@ $sidebarTests = Join-Path $build 'WeeklySidebarTests.exe'
 if ($LASTEXITCODE -ne 0) { throw 'Sidebar tests did not compile.' }
 & $sidebarTests
 if ($LASTEXITCODE -ne 0) { throw 'Sidebar attachment tests failed.' }
+$popupTests = Join-Path $build 'PopupPlacementTests.exe'
+& $compiler /nologo /langversion:5 /utf8output /target:exe /main:Kiven.WeeklyQuota.PopupPlacementTests ('/out:' + $popupTests) @nativeRefs @sidebarSources $state (Join-Path $nativeDir 'Program.cs') (Join-Path $nativeDir 'PopupPlacementTests.cs')
+if ($LASTEXITCODE -ne 0) { throw 'Popup tests did not compile.' }
+& $popupTests
+if ($LASTEXITCODE -ne 0) { throw 'Popup placement or background check failed.' }
 $node = Get-Command node.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source
 if (-not $node) { $node = Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe' }
 if (-not (Test-Path -LiteralPath $node)) { throw 'Node.js is required for the weekly reader.' }

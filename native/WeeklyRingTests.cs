@@ -12,8 +12,8 @@ namespace Kiven.WeeklyQuota
             new Point(117, 16), new Point(123, 16), new Point(224, 117), new Point(224, 123),
             new Point(123, 224), new Point(117, 224), new Point(16, 123), new Point(16, 117)
         };
-        private static readonly Color Active = Color.FromArgb(54, 142, 121);
-        private static readonly Color Track = Color.FromArgb(219, 231, 225);
+        private static readonly Color Active = Color.FromArgb(240, 119, 175);
+        private static readonly Color Track = Color.FromArgb(249, 226, 237);
         private static readonly Color UnknownTrack = Color.FromArgb(215, 221, 218);
 
         public static int Main(string[] args)
@@ -74,11 +74,11 @@ namespace Kiven.WeeklyQuota
                     // Restrict the ink measurement to the open area inside the rim.
                     // Use 50% coverage between the face and the label's green channel.
                     float innerRadius = 9f * size / 24f;
-                    int inkGreen = value.HasValue ? 78 : 126;
+                    int inkGreen = value.HasValue ? 39 : 126;
                     PointF center = MeasureCenter(bitmap, (x, y, pixel) => {
                         float dx = x - trackCenter.X, dy = y - trackCenter.Y;
                         return dx * dx + dy * dy <= innerRadius * innerRadius &&
-                            pixel.A >= 128 && 2 * pixel.G <= 251 + inkGreen;
+                            pixel.A >= 128 && 2 * pixel.G <= 255 + inkGreen;
                     });
                     float offsetX = Math.Abs(center.X - trackCenter.X);
                     float offsetY = Math.Abs(center.Y - trackCenter.Y);
@@ -130,7 +130,7 @@ namespace Kiven.WeeklyQuota
                     WeeklyRing.Draw(graphics, new RectangleF(30 + i * 100, 12, 80, 80), values[i]);
                     WeeklyRing.Draw(graphics, new RectangleF(58 + i * 100, 101, 24, 24), values[i]);
                 }
-                bitmap.Save(Path.Combine(directory, "A细环-原字体居中.png"), ImageFormat.Png);
+                bitmap.Save(Path.Combine(directory, "A细环-白底粉色.png"), ImageFormat.Png);
             }
         }
     }

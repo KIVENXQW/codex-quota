@@ -79,7 +79,10 @@ namespace Kiven.WeeklyQuota {
     Point? avatarOffset;
     bool searchingAvatar,searchRequested=true,disposed;
     // Construct and dispose on the application's UI message-pump thread.
-    public WindowTracker() {
+    readonly IntPtr ownPanel;
+    bool panelWasForeground;
+    public WindowTracker(IntPtr ownPanel) {
+      this.ownPanel=ownPanel;
       winEventCallback=OnWinEvent;
       bool foreground=InstallHook(EventSystemForeground,EventSystemForeground);
       bool location=InstallHook(EventObjectLocationChange,EventObjectLocationChange);
@@ -100,9 +103,13 @@ namespace Kiven.WeeklyQuota {
       if(eventType==EventSystemForeground) {
         // Target discovery belongs to Update, never to this native callback.
         searchRequested=true;
-        // Away/back events may be coalesced before Update sees the intermediate
-        // foreground. Revoke old confirmation now; reuse the cached element later.
-        InvalidateAvatar(false);
+        // Opening our adjacent panel, then returning to the same host, does not
+        // move the avatar. Recheck visibility without flickering the same badge.
+        bool ourPanelActivated=window==ownPanel;
+        bool backFromPanel=panelWasForeground && window==Target;
+        panelWasForeground=ourPanelActivated;
+        if(ourPanelActivated || backFromPanel) lastAvatarCheck=DateTime.MinValue;
+        else InvalidateAvatar(false);
       } else {
         if(window==IntPtr.Zero || window!=Target)return;
         if(eventType==EventSystemMinimizeStart || eventType==EventSystemMinimizeEnd) {
