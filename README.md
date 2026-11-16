@@ -1,6 +1,6 @@
 # Codex Quota
 
-Windows 上的 Codex 额度与用量小工具，版本 **2.4.1**。独立社区工具，与 OpenAI 无官方关联。
+Windows 上的 Codex 额度与用量小工具，版本 **2.4.2**。独立社区工具，与 OpenAI 无官方关联。
 
 默认采用极简主面板：细线文字导航、三行核心指标和较少的装饰。`外观 → 面板主题` 可切回玻璃主题，语言、配色、右下角显示形式和透明度会保存。
 
@@ -24,6 +24,8 @@ Windows 上的 Codex 额度与用量小工具，版本 **2.4.1**。独立社区�
 环境：Windows 10/11 x64、.NET Framework 4.8、较新的已登录 Codex 桌面客户端，以及 Node.js 22+。工具会查找 PATH 或可识别的 Codex 配套 Node 运行时。
 
 ### 登录 Windows 后自动启动
+
+右键完整版的托盘图标，点击「开机启动」即可开启或取消。勾选状态反映当前 Windows 用户的实际设置。
 
 在完整解压目录打开 PowerShell，执行一次：
 
@@ -51,7 +53,7 @@ Token 来自账户统计，可能延迟。工作时长和已完成回合来自�
 
 安装前校验 ZIP 和每个文件，独立助手替换并重启额度工具，失败回滚；保留本机数据、语言、颜色和来源配置，不关闭 Codex。
 
-**下载和安装过程使用当前已安装版本的更新页；完成后进入 2.4.1 的极简主面板。** 旧安装目录的 `repository` 若为空，需设为 `KIVENXQW/codex-quota`。推送代码不会触发升级，需发布更高版本正式 Release。详见 [UPDATES.md](UPDATES.md)。
+**下载和安装过程使用当前已安装版本的更新页；完成后进入 2.4.2 的极简主面板。** 旧安装目录的 `repository` 若为空，需设为 `KIVENXQW/codex-quota`。推送代码不会触发升级，需发布更高版本正式 Release。详见 [UPDATES.md](UPDATES.md)。
 
 ## 隐私与构建
 
@@ -63,7 +65,7 @@ Token 来自账户统计，可能延迟。工作时长和已完成回合来自�
 node --test
 ```
 
-使用 .NET Framework 的 `csc.exe`，无需 .NET SDK。版本来自 `version.json`；输出到 `dist/v2.4.1/`。新增原生源代码编译进 EXE，保留旧更新器的运行文件名单。
+使用 .NET Framework 的 `csc.exe`，无需 .NET SDK。版本来自 `version.json`；输出到 `dist/v2.4.2/`。新增原生源代码编译进 EXE，保留旧更新器的运行文件名单。
 
 ## English
 

@@ -42,7 +42,8 @@ namespace CodexQuota {
     readonly string root=AppDomain.CurrentDomain.BaseDirectory;
     QuotaState state=new QuotaState {Error="正在读取账户额度…"};
     UserPreferences preferences=UserPreferences.Load();
-    ToolStripMenuItem detailsItem,refreshItem,toggleItem,updateItem,exitItem;
+    ToolStripMenuItem detailsItem,refreshItem,toggleItem,updateItem,exitItem,startupItem;
+    bool startupBusy;
     UpdateController updater;
     bool refreshing,stopping,badgeEnabled=true,positionQueued;
     string lastStatus;
@@ -59,6 +60,10 @@ namespace CodexQuota {
       detailsItem=new ToolStripMenuItem("查看额度详情",null,delegate{ShowDetails(false);});menu.Items.Add(detailsItem);
       refreshItem=new ToolStripMenuItem("立即刷新",null,delegate{Refresh();});menu.Items.Add(refreshItem);
       toggleItem=new ToolStripMenuItem("头像上方显示额度");toggleItem.Checked=true;toggleItem.CheckOnClick=true;toggleItem.CheckedChanged+=delegate{badgeEnabled=toggleItem.Checked;Position();};menu.Items.Add(toggleItem);
+      startupItem=new ToolStripMenuItem();
+      startupItem.Click+=delegate{ReadOrChangeLoginStartup(!startupItem.Checked);};
+      menu.Items.Add(startupItem);
+      menu.Opening+=delegate{ReadOrChangeLoginStartup(null);};
       updateItem=new ToolStripMenuItem("检查更新",null,delegate{if(updater!=null)updater.Check(true);});menu.Items.Add(updateItem);
       menu.Items.Add(new ToolStripSeparator());exitItem=new ToolStripMenuItem("退出额度工具",null,delegate{ExitThread();});menu.Items.Add(exitItem);tray.ContextMenuStrip=menu;
       tray.MouseClick+=delegate(object sender,MouseEventArgs e){if(e.Button==MouseButtons.Left) {if(popup.Visible)popup.Hide();else ShowDetails(false);}};
@@ -94,6 +99,24 @@ namespace CodexQuota {
       EventHandler first=null;first=async delegate{Application.Idle-=first;await Task.Run((Action)EnsureService);if(!stopping){Refresh();updater.Start();}};Application.Idle+=first;
     }
     string T(string zh,string en){return preferences.Language=="en"?en:zh;}
+    async void ReadOrChangeLoginStartup(bool? enabled) {
+      if(startupBusy || stopping) return;
+      startupBusy=true;
+      startupItem.Enabled=false;
+      try {
+        string action=!enabled.HasValue?"Status":enabled.Value?"Enable":"Disable";
+        bool registered=await Task.Run(delegate{return FullStartupSetting.Invoke(root,action);});
+        if(stopping)return;
+        startupItem.Text=T("开机启动","Start at sign-in");
+        startupItem.Checked=registered;
+        startupItem.Enabled=true;
+      } catch(Exception) {
+        if(stopping)return;
+        startupItem.Checked=false;
+        startupItem.Text=T("开机启动（无法读取）","Start at sign-in (unavailable)");
+        if(enabled.HasValue) MessageBox.Show(T("Windows 未能确认完整版的启动设置。请重新打开托盘菜单查看。","Windows could not confirm the full edition's setting. Reopen the tray menu to check."),T("开机启动","Start at sign-in"),MessageBoxButtons.OK,MessageBoxIcon.Warning);
+      } finally {startupBusy=false;}
+    }
     void EnsureBadge() {
       if(badge!=null && !badge.IsDisposed)return;
       badge=new QuotaBadge();attachedLayoutVersion=-1;
@@ -107,6 +130,7 @@ namespace CodexQuota {
       corner.SetState(state);
       PositionCorner();
       detailsItem.Text=T("查看额度详情","Usage details");refreshItem.Text=T("立即刷新","Refresh now");
+      startupItem.Text=T("开机启动","Start at sign-in");
       toggleItem.Text=T("头像上方显示额度","Show badge above avatar");exitItem.Text=T("退出额度工具","Quit quota companion");
       updateItem.Text=T("检查更新","Check for updates");if(updater!=null)updater.SetPreferences(preferences);
     }
