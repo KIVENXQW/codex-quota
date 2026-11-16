@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace Kiven.WeeklyQuota
 {
@@ -29,12 +30,13 @@ namespace Kiven.WeeklyQuota
             if (args.Length == 2 && (args[0] == "--preview" || args[0] == "--preview-unavailable" || args[0] == "--preview-zero"))
                 return SavePreview(args[0], args[1]);
             if (args.Length == 1 && args[0] == "--quit") { Signal(QuitName); return 0; }
+            bool loginStartup = args.Length == 1 && args[0] == WeeklyLoginStartup.LoginArgument;
             bool owns = false;
             using (Mutex mutex = new Mutex(false, InstanceName))
             {
                 try { owns = mutex.WaitOne(0, false); }
                 catch (AbandonedMutexException) { owns = true; }
-                if (!owns) { Signal(OpenName); return 0; }
+                if (!owns) { if (!loginStartup) Signal(OpenName); return 0; }
                 try
                 {
                     using (EventWaitHandle open = new EventWaitHandle(false, EventResetMode.AutoReset, OpenName))
@@ -43,7 +45,7 @@ namespace Kiven.WeeklyQuota
                     using (ApplicationContext context = new ApplicationContext())
                     {
                         panel.FormClosed += delegate { context.ExitThread(); };
-                        panel.StartMonitoring();
+                        panel.StartMonitoring(!loginStartup);
                         Application.Run(context);
                     }
                 }
@@ -92,6 +94,7 @@ namespace Kiven.WeeklyQuota
         private readonly Button updateButton = new Button();
         private readonly ToolStripMenuItem releaseMenu = new ToolStripMenuItem();
         private readonly ToolStripMenuItem checkMenu = new ToolStripMenuItem("检查更新");
+        private readonly ToolStripMenuItem startupMenu = new ToolStripMenuItem("开机启动");
         private WeeklySidebar sidebar;
         private Thread signalThread;
         private Process worker;
@@ -145,6 +148,9 @@ namespace Kiven.WeeklyQuota
             checkMenu.Click += delegate { CheckUpdate(true); };
             trayMenu.Items.Add(releaseMenu);
             trayMenu.Items.Add(checkMenu);
+            startupMenu.Click += delegate { RefreshLoginStartup(true); };
+            trayMenu.Opening += delegate { RefreshLoginStartup(false); };
+            trayMenu.Items.Add(startupMenu);
             trayMenu.Items.Add("退出", null, delegate { ExitPanel(); });
             tray.ContextMenuStrip = trayMenu;
             tray.MouseClick += delegate(object sender, MouseEventArgs e) { if (e.Button == MouseButtons.Left) OpenPanel(); };
@@ -161,7 +167,28 @@ namespace Kiven.WeeklyQuota
             placementTimer.Tick += delegate { if (Visible || pendingOpen) PositionPanel(); };
         }
 
-        internal void StartMonitoring()
+        private void RefreshLoginStartup(bool toggle)
+        {
+            try
+            {
+                WeeklyLoginStartup setting = new WeeklyLoginStartup(Registry.CurrentUser, Application.ExecutablePath);
+                if (toggle) setting.SetEnabled(!setting.Enabled);
+                startupMenu.Checked = setting.Enabled;
+                startupMenu.Text = "开机启动";
+                startupMenu.ToolTipText = "当前用户登录 Windows 后在托盘运行极简周额度版";
+            }
+            catch (Exception error)
+            {
+                if (error is OutOfMemoryException) throw;
+                startupMenu.CheckState = CheckState.Indeterminate;
+                startupMenu.Text = "开机启动（无法读取或修改）";
+                startupMenu.ToolTipText = error.Message;
+                if (toggle) MessageBox.Show("设置开机启动失败。" + Environment.NewLine + error.Message,
+                    "极简周额度版", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        internal void StartMonitoring(bool showPanel)
         {
             // Make the dispatch HWND available for tracker callbacks before showing the popup.
             if (!IsHandleCreated) CreateHandle();
@@ -174,7 +201,7 @@ namespace Kiven.WeeklyQuota
             placementTimer.Start();
             RefreshReading();
             CheckUpdate(false);
-            OpenPanel();
+            if (showPanel) OpenPanel();
         }
 
         protected override void OnHandleCreated(EventArgs e)

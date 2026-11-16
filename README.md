@@ -6,11 +6,15 @@ Windows 上的独立小工具，显示当前 Codex 账户的周额度剩余与�
 
 ## 下载与启动
 
-从 [1.3.0 发布页](https://github.com/KIVENXQW/codex-quota/releases/tag/weekly-v1.3.0) 下载 CodexWeekly-win-x64.zip，完整解压后双击 CodexWeekly.exe。需要 Windows x64、.NET Framework 4.8、已登录的 Codex 桌面客户端及 Node.js 22+（可以使用本机 Codex 配套的 Node）。
+从 [极简版 1.3.1 发布页](https://github.com/KIVENXQW/codex-quota/releases/tag/weekly-v1.3.1) 下载 CodexWeekly-win-x64.zip，完整解压后双击 CodexWeekly.exe。需要 Windows x64、.NET Framework 4.8、已登录的 Codex 桌面客户端及 Node.js 22+（可以使用本机 Codex 配套的 Node）。
 
 额度每分钟刷新一次。F5 可立即刷新，Esc 收起至托盘。退出可用托盘菜单。1.1.0 及之后的极简版可以从托盘检查更新，在发现新版后打开发行页。发布标签使用 weekly-v 加版本号。
 
-## 1.3.0
+## 开机启动
+
+右键 Windows 通知区域中极简版的图标，选择「开机启动」。勾选后会在当前用户登录时启动极简版，取消勾选即可关闭。完整版有自己的同名菜单，可单独设置。
+
+## 界面
 
 - 侧栏使用白底粉色细环，周额度剩余 50% 时右半圈着色。
 - 详情面板展开时靠近侧栏徽标。屏幕边缘自动避让，重复打开时按同一规则定位。
